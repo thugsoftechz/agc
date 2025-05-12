@@ -2,227 +2,240 @@
 """
 agc - A secure, cross-platform CLI chat application.
 
-This application supports encrypted peer-to-peer chat and file transfer. 
-On first run, it auto-installs required modules if missing.
+Features:
+  • Encrypted peer-to-peer messaging and file transfers.
+  • Auto-installation of missing dependencies.
+  • Persistent settings and chat history logging.
+  • Simple command interface for sending files, clearing history, and exiting.
 """
 
-import subprocess
-import sys
 import os
+import sys
 import json
 import socket
 import threading
 import getpass
 import time
+import subprocess
+from cryptography.fernet import Fernet
 
 # ---------------------------
-# Auto-install required modules
+# Dependency Management
 # ---------------------------
-try:
-    from cryptography.fernet import Fernet
-except ImportError:
-    print("Module 'cryptography' not found. Installing...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "cryptography"])
-    from cryptography.fernet import Fernet
+REQUIRED_MODULES = ["cryptography"]
+
+def ensure_dependencies():
+    """Ensure that all required modules are installed."""
+    for module in REQUIRED_MODULES:
+        try:
+            __import__(module)
+        except ImportError:
+            print(f"[INFO] Module '{module}' not found. Installing...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", module])
+
+ensure_dependencies()
 
 # ---------------------------
-# Utility / Encryption Module
+# Encryption Utilities
 # ---------------------------
-
 def generate_session_key():
-    """Generate an ephemeral session key."""
+    """Generate a secure session key."""
     return Fernet.generate_key()
 
 def load_fernet(session_key):
+    """Initialize Fernet with the given session key."""
     return Fernet(session_key)
 
 def encrypt_message(fernet, message: bytes) -> bytes:
+    """Encrypt a byte-string message."""
     return fernet.encrypt(message)
 
 def decrypt_message(fernet, token: bytes) -> bytes:
+    """Decrypt the token back to plain text if possible."""
     try:
         return fernet.decrypt(token)
     except Exception:
         return b"[ERROR: Unable to decrypt message]"
 
 # ---------------------------
-# Settings and Persistent Storage
+# Persistent Storage and Logging
 # ---------------------------
-
 SETTINGS_FILE = "chat_settings.json"
+CHAT_HISTORY_FILE = "chat_history.log"
 
 def load_settings():
+    """Load application settings from the JSON file or return default settings."""
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, "r") as f:
             return json.load(f)
-    else:
-        # Default settings: keep chat history on by default and an empty contacts dict
-        return {"chat_history": True, "contacts": {}}
+    return {"chat_history": True, "contacts": {}}
 
 def save_settings(settings):
+    """Save the application settings to a JSON file."""
     with open(SETTINGS_FILE, "w") as f:
         json.dump(settings, f, indent=4)
 
 def log_chat(message: str):
+    """Log chat messages if logging is enabled."""
     settings = load_settings()
     if settings.get("chat_history", True):
-        with open("chat_history.log", "a") as f:
+        with open(CHAT_HISTORY_FILE, "a") as f:
             f.write(message + "\n")
 
 # ---------------------------
-# Chat Session: Shared Functions
+# File Transfer Functions
 # ---------------------------
-
 def send_file(fernet, conn, filename):
+    """Encrypt and send a file's contents over the connection."""
     if not os.path.exists(filename):
-        print(f"File '{filename}' not found.")
+        print(f"[ERROR] File '{filename}' not found.")
         return
     try:
         with open(filename, "rb") as f:
             content = f.read()
-        # Use a marker to identify file transfer data
-        prefix = b"[FILE]"
-        encrypted = encrypt_message(fernet, prefix + filename.encode() + b"::" + content)
+        payload = b"[FILE]" + filename.encode() + b"::" + content
+        encrypted = encrypt_message(fernet, payload)
         conn.sendall(encrypted)
-        print(f"File '{filename}' sent.")
+        print(f"[INFO] File '{filename}' sent.")
         log_chat(f"Sent file: {filename}")
     except Exception as e:
-        print("Error sending file:", e)
+        print(f"[ERROR] Error sending file: {e}")
 
 def handle_received_data(fernet, data):
+    """Decrypt and distinguish between a plain text message and a file."""
     dec = decrypt_message(fernet, data)
-    try:
-        # Check if it’s a file marker
-        if dec.startswith(b"[FILE]"):
-            # Format: [FILE]filename::filecontent
-            try:
-                payload = dec[len(b"[FILE]"):]
-                filename_part, file_content = payload.split(b"::", 1)
-                filename = filename_part.decode()
-                # Save file (prefixed with 'received_')
-                with open("received_" + filename, "wb") as f:
-                    f.write(file_content)
-                print(f"\nReceived file saved as: received_{filename}")
-                log_chat(f"Received file: {filename}")
-            except Exception:
-                print("Received a file but could not parse the data.")
-        else:
-            print("\nPeer:", dec.decode())
-            log_chat("Peer: " + dec.decode())
-    except Exception:
-        print("Error processing received data.")
+    if dec.startswith(b"[FILE]"):
+        try:
+            content = dec[len(b"[FILE]"):]
+            filename, file_content = content.split(b"::", 1)
+            filename = filename.decode()
+            received_filename = "received_" + filename
+            with open(received_filename, "wb") as f:
+                f.write(file_content)
+            print(f"\n[INFO] Received file saved as: {received_filename}")
+            log_chat(f"Received file: {filename}")
+        except Exception:
+            print("[ERROR] Received a file but could not parse the data.")
+    else:
+        try:
+            message = dec.decode()
+            print("\nPeer:", message)
+            log_chat("Peer: " + message)
+        except Exception:
+            print("[ERROR] Unable to decode message.")
 
 # ---------------------------
-# Chat Listening Thread
+# Chat Communication Threads
 # ---------------------------
-
 def chat_listener(conn, fernet):
+    """Listen for and process incoming messages."""
     while True:
         try:
             data = conn.recv(4096)
             if not data:
-                print("Connection closed by peer.")
+                print("[INFO] Connection closed by peer.")
                 break
             handle_received_data(fernet, data)
         except Exception as e:
-            print("Error receiving data:", e)
+            print(f"[ERROR] Error receiving data: {e}")
             break
-
-# ---------------------------
-# Send Chat Messages
-# ---------------------------
 
 def chat_sender(conn, fernet):
-    print("Type your messages below.\nCommands:\n   /file path/to/file      -> to send a file\n   /delchat                -> delete chat history\n   /exit                   -> exit chat")
+    """Send messages and commands from the user to the peer."""
+    instructions = (
+        "Commands:\n"
+        "  /file <path>   - Send a file\n"
+        "  /delchat       - Delete chat history\n"
+        "  /exit          - Exit the chat\n"
+    )
+    print(instructions)
     while True:
-        msg = input("> ")
-        if msg.strip() == "":
+        msg = input("> ").strip()
+        if not msg:
             continue
-        if msg.startswith("/file"):
-            parts = msg.split(" ", 1)
-            if len(parts) == 2:
-                filename = parts[1].strip()
-                send_file(fernet, conn, filename)
-            else:
-                print("Usage: /file path/to/file")
-        elif msg == "/exit":
+        if msg == "/exit":
             conn.close()
-            print("Chat session ended.")
+            print("[INFO] Chat session ended.")
             break
         elif msg == "/delchat":
-            if os.path.exists("chat_history.log"):
-                os.remove("chat_history.log")
-                print("Chat history deleted.")
+            if os.path.exists(CHAT_HISTORY_FILE):
+                os.remove(CHAT_HISTORY_FILE)
+                print("[INFO] Chat history deleted.")
             else:
-                print("No chat history found.")
+                print("[INFO] No chat history found.")
+        elif msg.startswith("/file "):
+            _, filename = msg.split(" ", 1)
+            send_file(fernet, conn, filename.strip())
         else:
-            encrypted = encrypt_message(fernet, msg.encode())
             try:
+                encrypted = encrypt_message(fernet, msg.encode())
                 conn.sendall(encrypted)
                 log_chat("Me: " + msg)
             except Exception as e:
-                print("Error sending message:", e)
+                print(f"[ERROR] Error sending message: {e}")
                 break
 
 # ---------------------------
-# Host (Server) Mode
+# Connection Set-Up (Host and Client)
 # ---------------------------
-
 def run_host():
-    HOST = ''  # Listen on all interfaces
-    PORT = 5000  # You can choose any port
-    print("Starting in HOST mode (waiting for connections)...")
+    """Run the application in HOST mode."""
+    HOST, PORT = '', 5000
+    print("[INFO] Hosting chat session...")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((HOST, PORT))
-        s.listen(1)
-        print(f"Listening on port {PORT}. Share your IP and port with your peer to connect.")
-        conn, addr = s.accept()
-        print(f"Connection attempt from {addr}.")
+        try:
+            s.bind((HOST, PORT))
+            s.listen(1)
+            print(f"[INFO] Listening on port {PORT}.")
+        except Exception as e:
+            print(f"[ERROR] Could not start server: {e}")
+            return
 
-        # Authentication: Use a preset password stored in settings.
+        conn, addr = s.accept()
+        print(f"[INFO] Connection accepted from {addr}.")
+        # Password Authentication (for production, consider hashed passwords)
         settings = load_settings()
         stored_pass = settings.get("password")
         if not stored_pass:
-            stored_pass = getpass.getpass("Set your session password (share with your peer): ")
-            settings["password"] = stored_pass  # In production, use secure hash storage!
+            stored_pass = getpass.getpass("Set your session password: ")
+            settings["password"] = stored_pass
             save_settings(settings)
 
-        # Prompt peer for password verification.
         conn.sendall(b"[AUTH] Please send the session password.")
         peer_pass = conn.recv(1024).decode().strip()
         if peer_pass != stored_pass:
             conn.sendall(b"[AUTH_FAIL] Incorrect password. Connection refused.")
-            print("Peer provided wrong password. Closing connection.")
+            print("[ERROR] Incorrect session password from peer. Disconnecting...")
             conn.close()
             return
         else:
             conn.sendall(b"[AUTH_OK]")
-            print("Peer verified. Securing session...")
+            print("[INFO] Password verified. Securing session...")
 
-        # Generate session key and send it securely.
+        # Secure the session using a newly generated session key.
         session_key = generate_session_key()
-        time.sleep(0.5)  # brief pause before transmission
+        time.sleep(0.5)  # Brief pause before sending key.
         conn.sendall(session_key)
         fernet = load_fernet(session_key)
-        print("Secure session established. Start chatting now.")
+        print("[INFO] Secure session established. Ready to chat.")
 
-        # Start communication threads.
-        listener = threading.Thread(target=chat_listener, args=(conn, fernet), daemon=True)
-        listener.start()
+        threading.Thread(target=chat_listener, args=(conn, fernet), daemon=True).start()
         chat_sender(conn, fernet)
 
-# ---------------------------
-# Client (Connector) Mode
-# ---------------------------
-
 def run_client():
+    """Run the application in Client mode."""
     host_ip = input("Enter host IP: ").strip()
-    host_port = int(input("Enter host port (e.g., 5000): ").strip())
+    try:
+        host_port = int(input("Enter host port (e.g., 5000): ").strip())
+    except ValueError:
+        print("[ERROR] Invalid port number.")
+        return
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.connect((host_ip, host_port))
         except Exception as e:
-            print("Failed to connect:", e)
+            print(f"[ERROR] Failed to connect: {e}")
             return
 
         auth_request = s.recv(1024)
@@ -231,29 +244,23 @@ def run_client():
             s.sendall(session_pass.encode())
             auth_resp = s.recv(1024)
             if auth_resp.startswith(b"[AUTH_FAIL]"):
-                print("Authentication failed. Closing connection.")
-                s.close()
+                print("[ERROR] Authentication failed. Disconnecting...")
                 return
             elif auth_resp.startswith(b"[AUTH_OK]"):
-                print("Authentication successful.")
+                print("[INFO] Authentication successful.")
         else:
-            print("Unexpected authentication step. Exiting.")
-            s.close()
+            print("[ERROR] Unexpected authentication step. Exiting.")
             return
 
         session_key = s.recv(1024)
         fernet = load_fernet(session_key)
-        print("Secure session established. Start chatting now.")
+        print("[INFO] Secure session established. Ready to chat.")
 
-        listener = threading.Thread(target=chat_listener, args=(s, fernet), daemon=True)
-        listener.start()
+        threading.Thread(target=chat_listener, args=(s, fernet), daemon=True).start()
         chat_sender(s, fernet)
 
-# ---------------------------
-# Main Application Entry Point
-# ---------------------------
-
 def main():
+    """Main entry point for the application."""
     print("=== agc: Secure CLI Chat Application ===")
     print("1. Host a chat session")
     print("2. Connect to a chat session")
@@ -263,7 +270,7 @@ def main():
     elif choice == "2":
         run_client()
     else:
-        print("Invalid choice. Exiting.")
+        print("[ERROR] Invalid choice. Exiting.")
 
 if __name__ == "__main__":
     main()
