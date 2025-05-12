@@ -4,8 +4,8 @@ agc - Secure CLI Chat Application
 
 A simple and secure command-line chat tool with built-in encryption,
 file transfer, and clipboard integration for easily sharing connection details.
-This version tries to help with NAT traversal by attempting to set up port forwarding via UPnP.
-If UPnP is available and enabled, it will automatically map your port for external connections.
+This version includes assistance for NAT traversal using UPnP and a prompt for
+a new port if the default port is already in use.
 """
 
 import os
@@ -62,7 +62,6 @@ def setup_nat(port, description="AGC Chat Application"):
         if ndevices > 0:
             upnpc.selectigd()
             external_ip = upnpc.externalipaddress()
-            # Try to add port mapping: external port maps to the same internal port.
             mapping = upnpc.addportmapping(port, 'TCP', upnpc.lanaddr, port, description, '')
             if mapping:
                 print(f"[INFO] Port {port} successfully mapped via UPnP. External IP: {external_ip}")
@@ -135,7 +134,6 @@ def send_file(fernet, conn, filename):
     try:
         with open(filename, "rb") as f:
             content = f.read()
-        # Tag the payload as a file, then encrypt.
         payload = b"[FILE]" + filename.encode() + b"::" + content
         encrypted = encrypt_message(fernet, payload)
         conn.sendall(encrypted)
@@ -223,79 +221,93 @@ def chat_sender(conn, fernet):
 # ---------------------------
 def run_host():
     """Start the chat app as Host with user-friendly prompts and NAT assistance."""
-    HOST, PORT = '', 5000
+    HOST = ''
+    DEFAULT_PORT = 5000
+    PORT = DEFAULT_PORT
+
     print("\n[HOST MODE] Starting your chat session...")
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # Allow address reuse to help if the port is in TIME_WAIT state.
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    # Attempt to bind; if port is unavailable, prompt for a different port.
+    while True:
         try:
             server_socket.bind((HOST, PORT))
-            server_socket.listen(1)
-            print(f"[INFO] Listening on port {PORT}.")
+            break
         except Exception as e:
-            print(f"[ERROR] Unable to start server: {e}")
-            return
+            print(f"[ERROR] Unable to bind port {PORT}: {e}")
+            new_port = input("Please enter a different port number: ").strip()
+            try:
+                PORT = int(new_port)
+            except ValueError:
+                print("[ERROR] Invalid port number. Please try again.")
 
-        settings = load_settings()
-        stored_pass = settings.get("password")
-        if not stored_pass:
-            stored_pass = getpass.getpass("Please set a session password: ")
-            settings["password"] = stored_pass
-            save_settings(settings)
+    server_socket.listen(1)
+    print(f"[INFO] Listening on port {PORT}.")
 
-        # Try UPnP NAT traversal.
-        nat_ip, mapping_success = setup_nat(PORT)
-        if mapping_success and nat_ip:
-            host_ip = nat_ip
-            print(f"[INFO] Using NAT-mapped external IP: {host_ip}")
+    settings = load_settings()
+    stored_pass = settings.get("password")
+    if not stored_pass:
+        stored_pass = getpass.getpass("Please set a session password: ")
+        settings["password"] = stored_pass
+        save_settings(settings)
+
+    # Try UPnP NAT traversal.
+    nat_ip, mapping_success = setup_nat(PORT)
+    if mapping_success and nat_ip:
+        host_ip = nat_ip
+        print(f"[INFO] Using NAT-mapped external IP: {host_ip}")
+    else:
+        host_ip = get_public_ip()
+        if not host_ip:
+            host_ip = socket.gethostbyname(socket.gethostname())
+            print(f"[WARN] Could not retrieve public IP. Using local IP: {host_ip}")
         else:
-            # Fallback: Try to get public IP; if not available, use local.
-            host_ip = get_public_ip()
-            if not host_ip:
-                host_ip = socket.gethostbyname(socket.gethostname())
-                print(f"[WARN] Could not retrieve public IP. Using local IP: {host_ip}")
-            else:
-                print(f"[INFO] Public IP retrieved successfully: {host_ip}")
+            print(f"[INFO] Public IP retrieved successfully: {host_ip}")
 
-        connection_info = (
-            "\n–––––– [HOST CONNECTION INFO] ––––––\n"
-            f"IP Address       : {host_ip}\n"
-            f"Port             : {PORT}\n"
-            f"Session Password : {stored_pass}\n"
-            "––––––––––––––––––––––––––––––––––––––––\n"
-            "Tip: If behind NAT, ensure your router forwards port 5000.\n"
-        )
-        try:
-            import pyperclip
-            pyperclip.copy(connection_info)
-            print("[INFO] Connection details have been copied to the clipboard.")
-        except Exception as e:
-            print(f"[WARN] Clipboard copy failed: {e}")
-        print(connection_info)
-        print("[INFO] Waiting for a client connection...\n")
+    connection_info = (
+        "\n–––––– [HOST CONNECTION INFO] ––––––\n"
+        f"IP Address       : {host_ip}\n"
+        f"Port             : {PORT}\n"
+        f"Session Password : {stored_pass}\n"
+        "––––––––––––––––––––––––––––––––––––––––\n"
+        "Tip: If behind NAT, ensure your router forwards this port.\n"
+    )
+    try:
+        import pyperclip
+        pyperclip.copy(connection_info)
+        print("[INFO] Connection details have been copied to the clipboard.")
+    except Exception as e:
+        print(f"[WARN] Clipboard copy failed: {e}")
+    print(connection_info)
+    print("[INFO] Waiting for a client connection...\n")
 
-        conn, addr = server_socket.accept()
-        print(f"[INFO] Connected with {addr}.")
+    conn, addr = server_socket.accept()
+    print(f"[INFO] Connected with {addr}.")
 
-        # Authentication procedure.
-        conn.sendall(b"[AUTH] Please send your session password.")
-        peer_pass = conn.recv(1024).decode().strip()
-        if peer_pass != stored_pass:
-            conn.sendall(b"[AUTH_FAIL] Incorrect password. Connection refused.")
-            print("[ERROR] Client entered an incorrect password. Disconnecting...")
-            conn.close()
-            return
-        else:
-            conn.sendall(b"[AUTH_OK]")
-            print("[INFO] Client successfully authenticated!")
+    # Authentication procedure.
+    conn.sendall(b"[AUTH] Please send your session password.")
+    peer_pass = conn.recv(1024).decode().strip()
+    if peer_pass != stored_pass:
+        conn.sendall(b"[AUTH_FAIL] Incorrect password. Connection refused.")
+        print("[ERROR] Client entered an incorrect password. Disconnecting...")
+        conn.close()
+        return
+    else:
+        conn.sendall(b"[AUTH_OK]")
+        print("[INFO] Client successfully authenticated!")
 
-        # Establish secure session.
-        session_key = generate_session_key()
-        time.sleep(0.5)
-        conn.sendall(session_key)
-        fernet = load_fernet(session_key)
-        print("[INFO] Secure session established. Let the chat begin!")
+    # Establish secure session.
+    session_key = generate_session_key()
+    time.sleep(0.5)
+    conn.sendall(session_key)
+    fernet = load_fernet(session_key)
+    print("[INFO] Secure session established. Let the chat begin!")
 
-        threading.Thread(target=chat_listener, args=(conn, fernet), daemon=True).start()
-        chat_sender(conn, fernet)
+    threading.Thread(target=chat_listener, args=(conn, fernet), daemon=True).start()
+    chat_sender(conn, fernet)
 
 def run_client():
     """Start the chat app as Client with friendly user prompts."""
