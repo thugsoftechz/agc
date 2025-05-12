@@ -1,4 +1,4 @@
-# agc - Secure CLI Chat Application
+agc - Secure CLI Chat Application
 
 ## Overview
 agc (Anonymous Group Chat) is a secure, cross-platform command-line chat application that supports encrypted peer-to-peer messaging and file transfer. It uses **Fernet symmetric encryption** to ensure secure communication.
@@ -21,13 +21,9 @@ agc (Anonymous Group Chat) is a secure, cross-platform command-line chat applica
    git clone https://github.com/yourusername/agc.git
    cd agc
    ```
-2. Install dependencies:
+2. Install the package and dependencies:
    ```sh
-   pip install -r requirements.txt
-   ```
-3. Install the package (optional):
-   ```sh
-   python setup.py install
+   pip install .
    ```
 
 ## Usage
@@ -59,3 +55,5 @@ Select `2` and enter the host's IP and port.
 
 ## Contribution
 Feel free to **fork**, **submit issues**, or create **pull requests** to improve the project.
+
+---
