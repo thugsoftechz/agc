@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-agc - Secure CLI Chat Application
 
-A simple and secure command-line chat tool with built-in encryption,
-file transfer, and clipboard integration for easily sharing connection details.
-This version includes assistance for NAT traversal using UPnP and a prompt for
-a new port if the default port is already in use.
-"""
 
 import os
 import sys
@@ -19,10 +12,7 @@ import subprocess
 import urllib.request
 from cryptography.fernet import Fernet
 
-# ---------------------------
-# Dependency Management
-# ---------------------------
-# We now need pyperclip for clipboard operations and miniupnpc for UPnP NAT traversal.
+
 REQUIRED_MODULES = ["cryptography", "pyperclip", "miniupnpc"]
 
 def ensure_dependencies():
@@ -36,9 +26,7 @@ def ensure_dependencies():
             
 ensure_dependencies()
 
-# ---------------------------
-# Utility: Public IP Lookup and NAT Traversal via UPnP
-# ---------------------------
+
 def get_public_ip(timeout=5):
     """Attempt to determine the host's public IP address using api.ipify.org."""
     try:
@@ -76,9 +64,6 @@ def setup_nat(port, description="AGC Chat Application"):
         print(f"[WARN] NAT traversal using UPnP failed: {e}")
         return None, False
 
-# ---------------------------
-# Encryption Utilities
-# ---------------------------
 def generate_session_key():
     """Generate an encryption key for the session."""
     return Fernet.generate_key()
@@ -98,9 +83,7 @@ def decrypt_message(fernet, token: bytes) -> bytes:
     except Exception:
         return b"[ERROR: Unable to decrypt message]"
 
-# ---------------------------
-# Persistent Storage & Logging
-# ---------------------------
+
 SETTINGS_FILE = "chat_settings.json"
 CHAT_HISTORY_FILE = "chat_history.log"
 
@@ -123,9 +106,6 @@ def log_chat(message: str):
         with open(CHAT_HISTORY_FILE, "a") as f:
             f.write(message + "\n")
 
-# ---------------------------
-# File Transfer Functions
-# ---------------------------
 def send_file(fernet, conn, filename):
     """Send a file securely to the client."""
     if not os.path.exists(filename):
@@ -165,9 +145,6 @@ def handle_received_data(fernet, data):
         except Exception:
             print("[ERROR] Unable to decode incoming message.")
 
-# ---------------------------
-# Chat Communication Threads
-# ---------------------------
 def chat_listener(conn, fernet):
     """Listen continuously for incoming messages."""
     while True:
@@ -216,9 +193,7 @@ def chat_sender(conn, fernet):
                 print(f"[ERROR] Failed to send message: {e}")
                 break
 
-# ---------------------------
-# Connection Setup (Host & Client)
-# ---------------------------
+
 def run_host():
     """Start the chat app as Host with user-friendly prompts and NAT assistance."""
     HOST = ''
