@@ -1,59 +1,80 @@
-agc - Secure CLI Chat Application
+Below is the complete content for your **README.md** file. You can copy and paste it into your repository:
+
+```markdown
+# agc - Secure CLI Chat Application (Anonymous Group Chat)
 
 ## Overview
-agc (Anonymous Group Chat) is a secure, cross-platform command-line chat application that supports encrypted peer-to-peer messaging and file transfer. It uses **Fernet symmetric encryption** to ensure secure communication.
+
+**agc** (Anonymous Group Chat) is a lightweight, cross-platform command-line chat application that empowers you to communicate securely. It supports encrypted peer-to-peer messaging and file transfers using **Fernet symmetric encryption**, ensuring your conversations remain private.
 
 ## Features
-- **End-to-end encryption** using the `cryptography` module.
-- **Peer-to-peer connection** via socket programming.
-- **File transfer** with encryption.
-- **Persistent settings** including chat history preferences.
-- **Command-based interaction** for intuitive usage.
+
+- **End-to-End Encryption:** Secure your messages with Python's `cryptography` module.
+- **Peer-to-Peer Connectivity:** Establish direct socket connections for real-time chat.
+- **Encrypted File Transfer:** Safely send and receive files with encryption.
+- **Persistent Settings:** Save your chat history preferences and configuration.
+- **Command-Based Interface:** Simple, intuitive commands for a streamlined experience.
 
 ## Installation
-### Prerequisites:
+
+### Prerequisites
+
 - Python 3.x installed
 - `pip` package manager available
 
-### Steps:
-1. Clone or download the repository:
+### Installation Steps
+
+1. **Clone the Repository:**
    ```sh
    git clone https://github.com/thugsoftechz/agc.git
    cd agc
    ```
-2. Install the package and dependencies:
+2. **Install Dependencies:**
    ```sh
    pip install .
    ```
 
 ## Usage
-### Running as Host (Server)
-To host a chat session:
+
+### Running as Host (Server Mode)
+
+To host a chat session, run:
+
 ```sh
 python agc.py
 ```
-Select `1` to start a session. Share your IP and port with your peer.
+
+Select option `1` when prompted to start a session. Share your IP address, port number, and session password with your peer.
 
 ### Connecting as Client
-To join a hosted session:
+
+To join an existing session, run:
+
 ```sh
 python agc.py
 ```
-Select `2` and enter the host's IP and port.
+
+Select option `2`, then enter the host's IP address and port number.
 
 ### Chat Commands
-| Command         | Description                               |
-|---------------|----------------------------------|
-| `/file path/to/file`  | Send a file securely |
-| `/delchat`   | Delete chat history |
-| `/exit`    | Quit chat session |
+
+| Command              | Description                   |
+|----------------------|-------------------------------|
+| `/file path/to/file` | Securely send a file          |
+| `/delchat`           | Delete chat history           |
+| `/exit`              | Quit the chat session         |
 
 ## Security & Authentication
-- A password-based authentication ensures peer verification.
-- Messages and files are encrypted using **Fernet encryption**.
-- Session keys are dynamically generated for each chat session.
 
-## Contribution
-Feel free to **fork**, **submit issues**, or create **pull requests** to improve the project.
+- **Authentication:** A password-based verification ensures that only authorized peers connect.
+- **Encryption:** All messages and files are encrypted using **Fernet encryption**.
+- **Dynamic Session Keys:** Every chat session generates a unique encryption key for enhanced security.
 
----
+## Contributing
+
+Contributions are welcome! Feel free to **fork** the repository, **submit issues**, or open **pull requests**. Your ideas and improvements will help make agc even better.
+
+Enjoy using **agc** for secure, streamlined command-line communication!
+```
+
+This README provides an overview of the project, its features, installation instructions, usage guidelines, and contribution details. Let me know if you need any further modifications or additional sections!
