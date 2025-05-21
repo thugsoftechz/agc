@@ -18,7 +18,7 @@ agc (Anonymous Group Chat) is a secure, cross-platform command-line chat applica
 ### Steps:
 1. Clone or download the repository:
    ```sh
-   git clone https://github.com/yourusername/agc.git
+   git clone https://github.com/thugsoftechz/agc.git
    cd agc
    ```
 2. Install the package and dependencies:
