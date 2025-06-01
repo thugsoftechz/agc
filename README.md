@@ -116,3 +116,6 @@ For major changes, open an issue to discuss.
 - **Persistent History** – Chat logs load automatically in **Web & GUI interfaces**.
 - **Integrated Features** – **Text, voice, file sharing** built into **one platform**.
 
+## GitAds Sponsored
+[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=thugsoftechz/agc@github)](https://gitads.dev/v1/ad-track?source=thugsoftechz/agc@github)
+
