@@ -107,7 +107,7 @@ AGC runs on:
 Want to improve AGC?  
 Fork the repo and send a pull request! 🚀  
 For major changes, open an issue to discuss.
-
+<!-- GitAds-Verify: WQWAW8CCB8LY4ZV45DPQ5S8UVJ2RFZ5I -->
 
 ---
 
