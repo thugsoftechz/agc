@@ -1,4 +1,4 @@
-Here’s a **reworked README.md** with improved structure, clear installation steps, feature explanations, and concise instructions.
+
 
 ---
 
@@ -116,5 +116,3 @@ For major changes, open an issue to discuss.
 - **Persistent History** – Chat logs load automatically in **Web & GUI interfaces**.
 - **Integrated Features** – **Text, voice, file sharing** built into **one platform**.
 
-This **restructured README** improves readability, **clarifies installation & usage**, and enhances **user experience**. 🚀
-Let me know if you want more refinements! 🎯
