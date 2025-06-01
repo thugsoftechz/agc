@@ -1,80 +1,120 @@
-Below is the complete content for your **README.md** file. You can copy and paste it into your repository:
+Here’s a **reworked README.md** with improved structure, clear installation steps, feature explanations, and concise instructions.
 
-```markdown
-# agc - Secure CLI Chat Application (Anonymous Group Chat)
+---
 
-## Overview
+# **AGC - Advanced Group Chat**
 
-**agc** (Anonymous Group Chat) is a lightweight, cross-platform command-line chat application that empowers you to communicate securely. It supports encrypted peer-to-peer messaging and file transfers using **Fernet symmetric encryption**, ensuring your conversations remain private.
+AGC is a **secure, multi-user chat system** offering **CLI, GUI, and Web interfaces**. Designed for **real-time conversations**, AGC supports **persistent chat history**, **file transfers**, and **voice calling**.
 
-## Features
+## **Features**
+- 🔒 **Secure Chat** – Messages are encrypted using **Fernet** for privacy.
+- 🔄 **Unified Login** – Enter a **chat nickname** and a **shared session password** to join.
+- 💾 **Persistent Chat History** – Chats are stored and loaded in GUI & Web modes.
+- 📎 **File Transfers** – Share files securely during conversations.
+- 🔊 **Voice Call Support** – High-quality **real-time audio communication** via PyAudio.
+- 🌎 **Web Chat Interface** – Browser-based **Flask-SocketIO chat** with login, history, and a "+" button to add details.
+- 🖥️ **GUI Mode** – A **Tkinter-powered chat window** for intuitive interactions.
+- ⚙️ **NAT Assistance** – Detects **public IP** and configures **UPnP port mapping**.
+- ⚡ **Fast & Lightweight** – Simple and efficient, built for seamless group chats.
 
-- **End-to-End Encryption:** Secure your messages with Python's `cryptography` module.
-- **Peer-to-Peer Connectivity:** Establish direct socket connections for real-time chat.
-- **Encrypted File Transfer:** Safely send and receive files with encryption.
-- **Persistent Settings:** Save your chat history preferences and configuration.
-- **Command-Based Interface:** Simple, intuitive commands for a streamlined experience.
+---
 
-## Installation
+## **Installation**
+First, install **AGC** via pip:
 
-### Prerequisites
-
-- Python 3.x installed
-- `pip` package manager available
-
-### Installation Steps
-
-1. **Clone the Repository:**
-   ```sh
-   git clone https://github.com/thugsoftechz/agc.git
-   cd agc
-   ```
-2. **Install Dependencies:**
-   ```sh
-   pip install .
-   ```
-
-## Usage
-
-### Running as Host (Server Mode)
-
-To host a chat session, run:
-
-```sh
-python agc.py
+```bash
+pip install agc
 ```
 
-Select option `1` when prompted to start a session. Share your IP address, port number, and session password with your peer.
+### **Optional Extras**
+To enable additional features:
+- **Voice Call Support:**  
+  ```bash
+  pip install agc[voice]```
+- **Web Chat Interface:**  
+  ```bash
+  pip install agc[web]```
+- **Full Installation (Voice & Web):**  
+  ```bash
+  pip install agc[full]```
 
-### Connecting as Client
+---
 
-To join an existing session, run:
+## **Usage**
 
-```sh
-python agc.py
+### **CLI Mode**
+Run AGC and choose an option:
+
+```bash
+agc
 ```
 
-Select option `2`, then enter the host's IP address and port number.
+You can:
+1️⃣ **Host a chat session**  
+2️⃣ **Join a chat session**  
+3️⃣ **Start a voice call**  
+4️⃣ **Reconnect to the last session**  
 
-### Chat Commands
+### **Web Mode**
+Run the Web interface:
 
-| Command              | Description                   |
-|----------------------|-------------------------------|
-| `/file path/to/file` | Securely send a file          |
-| `/delchat`           | Delete chat history           |
-| `/exit`              | Quit the chat session         |
-
-## Security & Authentication
-
-- **Authentication:** A password-based verification ensures that only authorized peers connect.
-- **Encryption:** All messages and files are encrypted using **Fernet encryption**.
-- **Dynamic Session Keys:** Every chat session generates a unique encryption key for enhanced security.
-
-## Contributing
-
-Contributions are welcome! Feel free to **fork** the repository, **submit issues**, or open **pull requests**. Your ideas and improvements will help make agc even better.
-
-Enjoy using **agc** for secure, streamlined command-line communication!
+```bash
+python app.py
 ```
 
-This README provides an overview of the project, its features, installation instructions, usage guidelines, and contribution details. Let me know if you need any further modifications or additional sections!
+Then open **[http://localhost:5000](http://localhost:5000)** in your browser.  
+Log in with your **chat nickname** and **session password** to access the chat.  
+Previous chat history is loaded automatically.
+
+### **GUI Mode**
+Run **AGC GUI** with persistent chat history:
+
+```bash
+agc --gui
+```
+
+Enjoy a **friendly, interactive chat window** with a **plus ("+") button** to add details.
+
+### **Voice Call**
+Start or join a voice call:
+
+```bash
+agc --voice
+```
+
+You'll connect to a **real-time audio chat** with other participants.
+
+---
+
+## **Updating AGC**
+If installed from Git, update with:
+
+```bash
+agc update
+```
+
+---
+
+## **System Requirements**
+AGC runs on:
+- **Windows, Linux, macOS** ✅
+- Python **3.8+**
+- Recommended dependencies: `cryptography`, `pyperclip`, `miniupnpc`, `pyaudio`, `flask`, `flask-socketio`
+
+---
+
+## **Contributing**
+Want to improve AGC?  
+Fork the repo and send a pull request! 🚀  
+For major changes, open an issue to discuss.
+
+
+---
+
+### **Final Notes**
+- **Simplified Login** – Use **chat nickname** and **session password** for **seamless connections**.
+- **Persistent History** – Chat logs load automatically in **Web & GUI interfaces**.
+- **Integrated Features** – **Text, voice, file sharing** built into **one platform**.
+
+This **restructured README** improves readability, **clarifies installation & usage**, and enhances **user experience**. 🚀
+Let me know if you want more refinements! 🎯
