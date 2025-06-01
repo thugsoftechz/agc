@@ -2,7 +2,7 @@ Here’s a **reworked README.md** with improved structure, clear installation st
 
 ---
 
-# **AGC - Advanced Group Chat**
+# **AGC - 
 
 AGC is a **secure, multi-user chat system** offering **CLI, GUI, and Web interfaces**. Designed for **real-time conversations**, AGC supports **persistent chat history**, **file transfers**, and **voice calling**.
 
