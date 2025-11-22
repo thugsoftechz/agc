@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AGC - Secure Web Chat</title>
+    <title>AGC - Advanced Secure Chat</title>
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#00a884">
+    <meta name="theme-color" content="#0b141a">
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -19,44 +19,51 @@
 </head>
 <body>
 
-    <!-- Login Modal -->
     <div id="login-modal" class="modal">
         <div class="modal-content">
-            <h2>Welcome to AGC</h2>
-            <p>Enter your nickname to join the secure chat.</p>
-            <input type="text" id="username-input" placeholder="Nickname" autocomplete="off">
-            <button id="join-btn">Join Chat</button>
+            <h2>AGC Secure Gateway</h2>
+            <p>End-to-End Encryption Enabled</p>
+            <div class="fingerprint-icon">🔒</div>
+            <input type="text" id="username-input" placeholder="Enter Alias" autocomplete="off">
+            <button id="join-btn">Establish Session</button>
         </div>
     </div>
 
-    <!-- Chat Container -->
     <div class="app-container" style="display: none;" id="app-container">
         <header class="chat-header">
-            <h1>AGC Web Chat</h1>
+            <div class="header-info">
+                <h1>AGC Session</h1>
+                <span class="secure-badge" title="Encrypted Connection">E2EE</span>
+            </div>
             <div class="controls">
                 <input type="file" id="file-input" style="display: none;">
-                <button id="file-btn" title="Send File">📁</button>
-                <button id="video-btn" title="Start Video Call">📹</button>
+                <button id="file-btn" class="icon-btn" title="Send File">
+                   📎
+                </button>
+                <button id="video-btn" class="icon-btn" title="Start Video Call">
+                   📹
+                </button>
             </div>
-            <!-- Status indicator removed from header to reduce clutter, fingerprint shown in chat -->
         </header>
 
-        <div id="chat-box" class="chat-box">
-            <!-- Messages will appear here -->
+        <!-- Security Banner -->
+        <div id="security-banner" class="security-banner">
+            <span id="fingerprint-display">Session Fingerprint: Verifying...</span>
         </div>
 
-        <!-- Video Call Area (Hidden by default) -->
+        <div id="chat-box" class="chat-box"></div>
+
         <div id="video-area" class="video-area" style="display: none;">
-            <video id="localVideo" autoplay playsinline muted></video>
-            <video id="remoteVideo" autoplay playsinline></video>
-            <button id="hangup-btn">End Call</button>
+            <div class="video-wrapper">
+                <video id="remoteVideo" autoplay playsinline></video>
+                <video id="localVideo" autoplay playsinline muted></video>
+            </div>
+            <button id="hangup-btn" class="danger-btn">End Call</button>
         </div>
 
         <div class="chat-input-area">
             <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
-            <button id="send-btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-            </button>
+            <button id="send-btn" class="send-btn">➤</button>
         </div>
     </div>
 

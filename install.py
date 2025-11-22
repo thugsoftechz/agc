@@ -17,7 +17,7 @@ Exec={DIST_PATH}
 Icon=utilities-terminal
 Terminal=true
 Type=Application
-Categories=Network;
+Categories=Network;Security;
 """
 
     desktop_path = os.path.expanduser(f"~/.local/share/applications/{APP_NAME.lower()}.desktop")
@@ -26,30 +26,28 @@ Categories=Network;
     with open(desktop_path, "w") as f:
         f.write(desktop_entry)
 
-    # Make it executable
     os.chmod(desktop_path, 0o755)
     print(f"[SUCCESS] Installed to {desktop_path}")
 
 def create_windows_shortcut():
     print("[INFO] Creating Windows Shortcut...")
     try:
-        # Use PowerShell to create shortcut to avoid external dependencies like winshell
         desktop = os.path.join(os.environ['USERPROFILE'], 'Desktop')
         start_menu = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs')
-
         targets = [desktop, start_menu]
 
         for target_dir in targets:
+            if not os.path.exists(target_dir): continue
             link_path = os.path.join(target_dir, f"{APP_NAME}.lnk")
 
             ps_script = f"""
             $WshShell = New-Object -comObject WScript.Shell
             $Shortcut = $WshShell.CreateShortcut("{link_path}")
             $Shortcut.TargetPath = "{DIST_PATH}"
-            $Shortcut.Description = "Advanced Secure Chat"
+            $Shortcut.Description = "AGC Secure Chat"
+            $Shortcut.WorkingDirectory = "{os.path.dirname(DIST_PATH)}"
             $Shortcut.Save()
             """
-
             subprocess.run(["powershell", "-Command", ps_script], check=True)
             print(f"[SUCCESS] Shortcut created at {link_path}")
 
@@ -58,23 +56,22 @@ def create_windows_shortcut():
 
 def create_mac_app_bundle():
     print("[INFO] Creating macOS .app bundle...")
-    # This is a basic wrapper. PyInstaller can do this automatically with --windowed,
-    # but if we just have the binary:
+    # Note: PyInstaller can generate .app directly with --windowed, but this manually wraps the binary if needed.
     app_path = os.path.join(os.getcwd(), "dist", f"{APP_NAME}.app")
     contents_path = os.path.join(app_path, "Contents")
     macos_path = os.path.join(contents_path, "MacOS")
+    resources_path = os.path.join(contents_path, "Resources")
 
     if os.path.exists(app_path):
         shutil.rmtree(app_path)
 
     os.makedirs(macos_path)
+    os.makedirs(resources_path)
 
-    # Copy binary
     dest_binary = os.path.join(macos_path, EXECUTABLE_NAME)
     shutil.copy(DIST_PATH, dest_binary)
     os.chmod(dest_binary, 0o755)
 
-    # Info.plist
     plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -89,6 +86,10 @@ def create_mac_app_bundle():
     <string>1.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.13</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
 </dict>
 </plist>
 """
@@ -96,11 +97,11 @@ def create_mac_app_bundle():
         f.write(plist)
 
     print(f"[SUCCESS] .app bundle created at {app_path}")
-    print("To install, drag this folder to your Applications folder.")
 
 def install():
     if not os.path.exists(DIST_PATH):
-        print(f"[ERROR] Executable not found at {DIST_PATH}. Run build_app.py first.")
+        print(f"[ERROR] Executable not found at {DIST_PATH}.")
+        print("Please run 'python3 build_app.py' first.")
         return
 
     system = platform.system()
@@ -111,7 +112,7 @@ def install():
     elif system == "Darwin":
         create_mac_app_bundle()
     else:
-        print(f"[WARN] Unsupported system for auto-install: {system}")
+        print(f"[WARN] Auto-install not supported for {system}.")
 
 if __name__ == "__main__":
     install()
