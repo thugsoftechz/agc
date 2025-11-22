@@ -23,7 +23,7 @@ AGC is a **secure, multi-functional chat ecosystem** designed for privacy and ve
 
 #### **1. Quick Install via Pip**
 ```bash
-pip install agc
+pip install -r requirements.txt
 ```
 
 #### **2. Build Executable (Standalone)**
@@ -52,9 +52,24 @@ python install.py
 ---
 
 ### **Android Support**
-AGC supports Android via **Termux** (native Python) or the **Web Interface** (PWA).
 
-See **[ANDROID_README.md](ANDROID_README.md)** for detailed instructions.
+AGC supports Android in two ways: **Native Termux** (CLI) or **Native App** (APK).
+
+#### **Option 1: Build the APK (Recommended)**
+We include a tool to help you build a native Android APK using `buildozer`.
+
+1.  **Requirements:** Linux (Ubuntu) or macOS. Windows users should use WSL2.
+2.  **Run the Builder:**
+    ```bash
+    python3 build_apk.py
+    ```
+    This script will check your environment and run `buildozer` to compile the APK.
+    *   *Note: This process can take 15-30 minutes on the first run as it downloads the Android SDK/NDK.*
+
+3.  **Install:** Transfer the resulting `.apk` file (found in `bin/`) to your phone and install it.
+
+#### **Option 2: Termux**
+See **[ANDROID_README.md](ANDROID_README.md)** for instructions on running the Python code directly on your phone.
 
 ---
 
