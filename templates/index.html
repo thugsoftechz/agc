@@ -4,9 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AGC - Secure Web Chat</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#00a884">
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(reg => console.log('Service Worker Registered', reg))
+          .catch(err => console.log('Service Worker Failed', err));
+      }
+    </script>
 </head>
 <body>
 
@@ -29,7 +38,7 @@
                 <button id="file-btn" title="Send File">📁</button>
                 <button id="video-btn" title="Start Video Call">📹</button>
             </div>
-            <div class="status-indicator online"></div>
+            <!-- Status indicator removed from header to reduce clutter, fingerprint shown in chat -->
         </header>
 
         <div id="chat-box" class="chat-box">

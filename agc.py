@@ -10,6 +10,8 @@ import subprocess
 import urllib.request
 import argparse
 import struct
+import hashlib
+import base64
 # Removed pickle for security
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -152,14 +154,18 @@ def recv_encrypted(conn):
     token = recvall(conn, token_length)
     return token
 
+# ------------------------- Crypto Helper -------------------------
+def get_fingerprint(key_bytes):
+    """Generate a short, human-readable fingerprint of a public key."""
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(key_bytes)
+    full_hash = digest.finalize()
+    # Return first 16 chars of hex for easy verification
+    return full_hash.hex()[:16].upper()
+
 def perform_secure_handshake_server(conn):
     """
-    Server side handshake:
-    1. Generate RSA key pair.
-    2. Send public key to client.
-    3. Receive encrypted session key from client.
-    4. Decrypt session key with private key.
-    Returns: session_key (bytes)
+    Server side handshake with Fingerprint display.
     """
     print("[CRYPTO] Generating RSA keys...")
     private_key = rsa.generate_private_key(
@@ -172,6 +178,11 @@ def perform_secure_handshake_server(conn):
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
 
+    # Display Fingerprint
+    fingerprint = get_fingerprint(pem)
+    print(f"\n[SECURITY] Your Session Fingerprint: {fingerprint}")
+    print("Verify this matches the client's fingerprint to ensure no MITM attack.\n")
+
     # Send Public Key
     conn.sendall(len(pem).to_bytes(4, 'big'))
     conn.sendall(pem)
@@ -183,30 +194,35 @@ def perform_secure_handshake_server(conn):
     encrypted_session_key = recvall(conn, length)
 
     # Decrypt
-    session_key = private_key.decrypt(
-        encrypted_session_key,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
+    try:
+        session_key = private_key.decrypt(
+            encrypted_session_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
         )
-    )
-    return session_key
+        return session_key
+    except Exception as e:
+        print(f"[ERROR] Decryption failed: {e}")
+        return None
 
 def perform_secure_handshake_client(conn):
     """
-    Client side handshake:
-    1. Receive server's public key.
-    2. Generate random session key.
-    3. Encrypt session key with server's public key.
-    4. Send encrypted session key.
-    Returns: session_key (bytes)
+    Client side handshake with Fingerprint display.
     """
     # Receive Public Key
     length_data = recvall(conn, 4)
     if not length_data: return None
     length = int.from_bytes(length_data, 'big')
     pem = recvall(conn, length)
+
+    # Display Fingerprint
+    fingerprint = get_fingerprint(pem)
+    print(f"\n[SECURITY] Host Fingerprint: {fingerprint}")
+    print("Verify this matches the host's fingerprint to ensure no MITM attack.\n")
+
     public_key = serialization.load_pem_public_key(pem)
 
     # Generate Session Key
@@ -813,6 +829,37 @@ def run_web_app():
     except ImportError:
         print("[ERROR] Web dependencies not found. Please install 'flask' and 'flask-socketio'.")
 
+# ------------------------- Discovery Feature -------------------------
+def broadcast_listener(stop_event):
+    """Listen for UDP broadcasts to find hosts on LAN."""
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    client.bind(("", 5005))
+    print("[DISCOVERY] Listening for hosts on LAN...")
+    while not stop_event.is_set():
+        try:
+            client.settimeout(1.0)
+            data, addr = client.recvfrom(1024)
+            if data.startswith(b"[AGC_HOST]"):
+                print(f"\n[FOUND HOST] {addr[0]} - {data.decode().split(':', 1)[1]}")
+        except socket.timeout:
+            continue
+        except:
+            pass
+
+def broadcast_announcer(port, stop_event):
+    """Broadcast presence on LAN."""
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    server.settimeout(0.2)
+    msg = f"[AGC_HOST]:Port {port}".encode()
+    while not stop_event.is_set():
+        try:
+            server.sendto(msg, ('<broadcast>', 5005))
+            time.sleep(2)
+        except:
+            pass
+
 # ------------------------- Main Application Modes -------------------------
 def run_host():
     """Run as Host (Console Mode)."""
@@ -836,6 +883,11 @@ def run_host():
                 print("[ERROR] Invalid port number. Please try again.")
     server_socket.listen(1)
     print(f"[INFO] Listening on port {PORT}.")
+
+    # Start Discovery Announcer
+    stop_broadcast = threading.Event()
+    t_broad = threading.Thread(target=broadcast_announcer, args=(PORT, stop_broadcast), daemon=True)
+    t_broad.start()
 
     lan_ip = socket.gethostbyname(socket.gethostname())
     nat_ip, mapping_success = setup_nat(PORT)
@@ -870,6 +922,7 @@ def run_host():
     print(connection_info)
     print("[INFO] Waiting for a client connection...\n")
     conn, addr = server_socket.accept()
+    stop_broadcast.set() # Stop announcing once connected
     print(f"[INFO] Connected to {addr}.")
 
     conn.sendall(b"[AUTH] Please send your session password.")
@@ -897,7 +950,22 @@ def run_host():
 
 def run_client():
     """Run as Client (Console Mode) using manual host details."""
-    print("\n[CLIENT MODE] Enter host connection details.")
+    print("\n[CLIENT MODE]")
+    print("1. Enter Host IP Manually")
+    print("2. Scan LAN for Hosts")
+    sub = input("Choice: ").strip()
+
+    host_ip = ""
+    host_port = 5000
+
+    if sub == "2":
+        stop_scan = threading.Event()
+        t_scan = threading.Thread(target=broadcast_listener, args=(stop_scan,), daemon=True)
+        t_scan.start()
+        input("Scanning... Press Enter to stop and enter IP.\n")
+        stop_scan.set()
+
+    print("\nEnter host connection details.")
     host_ip = input("Host IP Address: ").strip()
     try:
         host_port = int(input("Host Port (e.g., 5000): ").strip())

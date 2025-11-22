@@ -26,6 +26,16 @@ document.addEventListener("DOMContentLoaded", function() {
     const remoteVideo = document.getElementById('remoteVideo');
     const hangupBtn = document.getElementById('hangup-btn');
 
+    // Typing Indicator
+    let typingTimeout;
+    const chatHeader = document.querySelector('.chat-header');
+    const typingDiv = document.createElement('div');
+    typingDiv.style.fontSize = '0.8rem';
+    typingDiv.style.color = '#00a884';
+    typingDiv.style.marginLeft = '10px';
+    typingDiv.style.display = 'none';
+    chatHeader.appendChild(typingDiv);
+
     // Join Chat
     joinBtn.addEventListener('click', function() {
         const name = usernameInput.value.trim();
@@ -49,6 +59,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (text && username) {
             socket.emit('send_message', { username: username, text: text });
             messageInput.value = "";
+            socket.emit('stop_typing', { username: username });
         }
     }
 
@@ -56,6 +67,12 @@ document.addEventListener("DOMContentLoaded", function() {
     messageInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             sendMessage();
+        } else {
+            socket.emit('typing', { username: username });
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                socket.emit('stop_typing', { username: username });
+            }, 1000);
         }
     });
 
@@ -82,6 +99,27 @@ document.addEventListener("DOMContentLoaded", function() {
     // Receive Message
     socket.on('message', function(data) {
         appendMessage(data);
+    });
+
+    // Receive Fingerprint
+    socket.on('security_fingerprint', function(data) {
+        const fingerprintSpan = document.createElement('div');
+        fingerprintSpan.style.fontSize = '0.7rem';
+        fingerprintSpan.style.color = '#8696a0';
+        fingerprintSpan.style.textAlign = 'center';
+        fingerprintSpan.style.marginTop = '10px';
+        fingerprintSpan.textContent = `🔒 Secured (Fingerprint: ${data.fingerprint})`;
+        chatBox.appendChild(fingerprintSpan);
+    });
+
+    // Typing Events
+    socket.on('display_typing', function(data) {
+        typingDiv.textContent = `${data.user} is typing...`;
+        typingDiv.style.display = 'block';
+    });
+
+    socket.on('hide_typing', function(data) {
+        typingDiv.style.display = 'none';
     });
 
     // Receive File
@@ -137,7 +175,14 @@ document.addEventListener("DOMContentLoaded", function() {
 
             const metaSpan = document.createElement('span');
             metaSpan.classList.add('meta');
-            metaSpan.textContent = data.time;
+
+            // Add ticks if it's a sent message
+            let tickHtml = "";
+            if (data.user === username) {
+                tickHtml = `<span class="tick">✓✓</span>`; // Double tick simulation
+            }
+
+            metaSpan.innerHTML = `${data.time} ${tickHtml}`;
             msgDiv.appendChild(metaSpan);
         }
 
