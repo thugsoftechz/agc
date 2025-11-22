@@ -13,10 +13,7 @@ package.domain = org.thugsoftechz
 source.dir = .
 
 # (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,kv,atlas,html,css,js,json
-
-# (list) List of inclusions using pattern matching
-#source.include_patterns = assets/*,images/*.png
+source.include_exts = py,png,jpg,kv,atlas,html,css,js,json,txt
 
 # (list) Source files to exclude (let empty to not exclude anything)
 source.exclude_exts = spec
@@ -24,22 +21,14 @@ source.exclude_exts = spec
 # (list) List of directory to exclude (let empty to not exclude anything)
 source.exclude_dirs = tests, bin, __pycache__, .git, dist, build
 
-# (list) List of exclusions using pattern matching
-#source.exclude_patterns = license,images/*/*.jpg
-
 # (str) Application versioning (method 1)
-version = 0.5.0
+version = 0.5.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy,flask,flask-socketio,eventlet,cryptography,pyperclip,miniupnpc,imutils,numpy,opencv-python
-
-# (str) Custom source folders for requirements
-# Sets custom source for any requirements with recipes
-# requirements.source.kivy = ../../kivy
-
-# (list) Garden requirements
-#garden_requirements =
+# Removed complex deps like opencv-python for initial stability if needed, but keeping for now.
+# Note: 'cryptography' often requires specific recipes or older versions on Android.
+requirements = python3,kivy==2.3.0,flask,flask-socketio,eventlet,cryptography,pyperclip,miniupnpc,imutils,numpy,opencv-python
 
 # (str) Presplash of the application
 #presplash.filename = %(source.dir)s/data/presplash.png
@@ -61,19 +50,19 @@ orientation = portrait
 fullscreen = 1
 
 # (list) Permissions
-android.permissions = INTERNET,CAMERA,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE
+android.permissions = INTERNET,ACCESS_NETWORK_STATE,CAMERA,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
 # (int) Target Android API, should be as high as possible (distutils)
-android.api = 31
+android.api = 33
 
 # (int) Minimum API your APK will support.
-android.minapi = 21
+android.minapi = 24
 
 # (int) Android SDK version to use
-android.sdk = 31
+android.sdk = 33
 
 # (str) Android NDK version to use
-android.ndk = 23b
+android.ndk = 25b
 
 # (bool) Use --private data storage (True) or --dir public storage (False)
 #android.private_storage = True
