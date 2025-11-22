@@ -9,20 +9,31 @@ import time
 import subprocess
 import urllib.request
 import argparse
+import struct
+# Removed pickle for security
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
 
 # Ensure required dependencies are installed
-REQUIRED_MODULES = ["cryptography", "pyperclip", "miniupnpc", "pyaudio"]
+REQUIRED_MODULES = ["cryptography", "pyperclip", "miniupnpc", "pyaudio", "cv2", "imutils", "numpy"]
 
 def ensure_dependencies():
     """Ensure required dependencies are installed."""
     for module in REQUIRED_MODULES:
         try:
-            __import__(module)
+            # Handle module name mismatches for import
+            import_name = module
+            if module == "cv2": import_name = "cv2"
+            if module == "opencv-python": import_name = "cv2"
+
+            __import__(import_name)
         except ImportError:
             print(f"[INFO] Module '{module}' not found. Attempting to install...")
             try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", module])
+                install_name = module
+                if module == "cv2": install_name = "opencv-python"
+                subprocess.check_call([sys.executable, "-m", "pip", "install", install_name])
             except subprocess.CalledProcessError:
                 print(f"[WARN] Failed to install {module}. Some features may not work.")
 
@@ -140,6 +151,82 @@ def recv_encrypted(conn):
     token_length = int.from_bytes(header, byteorder="big")
     token = recvall(conn, token_length)
     return token
+
+def perform_secure_handshake_server(conn):
+    """
+    Server side handshake:
+    1. Generate RSA key pair.
+    2. Send public key to client.
+    3. Receive encrypted session key from client.
+    4. Decrypt session key with private key.
+    Returns: session_key (bytes)
+    """
+    print("[CRYPTO] Generating RSA keys...")
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
+    public_key = private_key.public_key()
+    pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    # Send Public Key
+    conn.sendall(len(pem).to_bytes(4, 'big'))
+    conn.sendall(pem)
+
+    # Receive Encrypted Session Key
+    length_data = recvall(conn, 4)
+    if not length_data: return None
+    length = int.from_bytes(length_data, 'big')
+    encrypted_session_key = recvall(conn, length)
+
+    # Decrypt
+    session_key = private_key.decrypt(
+        encrypted_session_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    return session_key
+
+def perform_secure_handshake_client(conn):
+    """
+    Client side handshake:
+    1. Receive server's public key.
+    2. Generate random session key.
+    3. Encrypt session key with server's public key.
+    4. Send encrypted session key.
+    Returns: session_key (bytes)
+    """
+    # Receive Public Key
+    length_data = recvall(conn, 4)
+    if not length_data: return None
+    length = int.from_bytes(length_data, 'big')
+    pem = recvall(conn, length)
+    public_key = serialization.load_pem_public_key(pem)
+
+    # Generate Session Key
+    session_key = Fernet.generate_key()
+
+    # Encrypt Session Key
+    encrypted_session_key = public_key.encrypt(
+        session_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+
+    conn.sendall(len(encrypted_session_key).to_bytes(4, 'big'))
+    conn.sendall(encrypted_session_key)
+
+    return session_key
+
 
 SETTINGS_FILE = "chat_settings.json"
 CHAT_HISTORY_FILE = "chat_history.log"
@@ -369,7 +456,17 @@ def run_voice_call_host():
     host_socket.listen(1)
     print(f"[INFO] Voice call host listening on port {VOICE_PORT}. Waiting for a connection...")
     conn, addr = host_socket.accept()
-    print(f"[INFO] Connection established with {addr}. Starting voice call...")
+    print(f"[INFO] Connection established with {addr}. Performing Handshake...")
+
+    # Handshake
+    session_key = perform_secure_handshake_server(conn)
+    if not session_key:
+        print("[ERROR] Handshake failed.")
+        conn.close()
+        return
+    fernet = Fernet(session_key)
+    print("[INFO] Handshake secure. Starting encrypted voice call...")
+
     p = pyaudio.PyAudio()
     # Audio settings
     CHUNK = 1024
@@ -382,7 +479,8 @@ def run_voice_call_host():
         try:
             while True:
                 data = stream.read(CHUNK)
-                conn.sendall(data)
+                encrypted = fernet.encrypt(data)
+                conn.sendall(len(encrypted).to_bytes(4, 'big') + encrypted)
         except Exception as e:
             print("[ERROR] Audio sending error:", e)
         finally:
@@ -393,10 +491,13 @@ def run_voice_call_host():
         stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
         try:
             while True:
-                data = conn.recv(CHUNK)
-                if not data:
-                    break
-                stream.write(data)
+                header = recvall(conn, 4)
+                if not header: break
+                length = int.from_bytes(header, 'big')
+                data = recvall(conn, length)
+                if not data: break
+                decrypted = fernet.decrypt(data)
+                stream.write(decrypted)
         except Exception as e:
             print("[ERROR] Audio receiving error:", e)
         finally:
@@ -433,7 +534,17 @@ def run_voice_call_client():
     except Exception as e:
         print(f"[ERROR] Could not connect to voice call host: {e}")
         return
-    print("[INFO] Connected to voice call host. Starting voice call...")
+    print("[INFO] Connected to voice call host. Performing handshake...")
+
+    # Handshake
+    session_key = perform_secure_handshake_client(client_socket)
+    if not session_key:
+        print("[ERROR] Handshake failed.")
+        client_socket.close()
+        return
+    fernet = Fernet(session_key)
+    print("[INFO] Handshake secure. Starting encrypted voice call...")
+
     p = pyaudio.PyAudio()
     CHUNK = 1024
     FORMAT = pyaudio.paInt16
@@ -445,7 +556,8 @@ def run_voice_call_client():
         try:
             while True:
                 data = stream.read(CHUNK)
-                client_socket.sendall(data)
+                encrypted = fernet.encrypt(data)
+                client_socket.sendall(len(encrypted).to_bytes(4, 'big') + encrypted)
         except Exception as e:
             print("[ERROR] Audio sending error:", e)
         finally:
@@ -456,10 +568,13 @@ def run_voice_call_client():
         stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
         try:
             while True:
-                data = client_socket.recv(CHUNK)
-                if not data:
-                    break
-                stream.write(data)
+                header = recvall(client_socket, 4)
+                if not header: break
+                length = int.from_bytes(header, 'big')
+                data = recvall(client_socket, length)
+                if not data: break
+                decrypted = fernet.decrypt(data)
+                stream.write(decrypted)
         except Exception as e:
             print("[ERROR] Audio receiving error:", e)
         finally:
@@ -474,6 +589,220 @@ def run_voice_call_client():
     client_socket.close()
     p.terminate()
     print("Voice call ended.")
+
+# ------------------------- Video Call Feature -------------------------
+def run_video_call_host():
+    try:
+        import cv2
+        import imutils
+        import numpy as np
+    except ImportError:
+        print("[ERROR] OpenCV or Imutils not found. Please install with: pip install opencv-python imutils")
+        return
+
+    VIDEO_PORT = 7000
+    print("\n[VIDEO CALL HOST] Starting video call session...")
+    host_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    host_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    while True:
+        try:
+            host_socket.bind(('', VIDEO_PORT))
+            break
+        except Exception as e:
+            print(f"[ERROR] Unable to bind video port {VIDEO_PORT}: {e}")
+            new_port = input("Enter a different video port number: ").strip()
+            try:
+                VIDEO_PORT = int(new_port)
+            except ValueError:
+                print("[ERROR] Invalid port number.")
+
+    host_socket.listen(1)
+    print(f"[INFO] Video host listening on port {VIDEO_PORT}. Waiting for connection...")
+    conn, addr = host_socket.accept()
+    print(f"[INFO] Connection established with {addr}. Performing Handshake...")
+
+    # Handshake
+    session_key = perform_secure_handshake_server(conn)
+    if not session_key:
+        print("[ERROR] Handshake failed.")
+        conn.close()
+        return
+    fernet = Fernet(session_key)
+    print("[INFO] Handshake secure. Starting encrypted video call...")
+
+    cap = cv2.VideoCapture(0)
+
+    def send_video():
+        while cap.isOpened():
+            try:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frame = imutils.resize(frame, width=320)
+                # Convert to JPEG bytes instead of pickle
+                _, buffer = cv2.imencode('.jpg', frame)
+                frame_bytes = buffer.tobytes()
+
+                encrypted = fernet.encrypt(frame_bytes)
+
+                message = struct.pack("Q", len(encrypted)) + encrypted
+                conn.sendall(message)
+
+                # Display own video
+                cv2.imshow('My Video (Host)', frame)
+                if cv2.waitKey(1) == 13: # Enter key
+                    break
+            except Exception:
+                break
+        conn.close()
+
+    def receive_video():
+        data = b""
+        payload_size = struct.calcsize("Q")
+        while True:
+            try:
+                while len(data) < payload_size:
+                    packet = conn.recv(4*1024)
+                    if not packet: return
+                    data += packet
+                packed_msg_size = data[:payload_size]
+                data = data[payload_size:]
+                msg_size = struct.unpack("Q", packed_msg_size)[0]
+
+                while len(data) < msg_size:
+                    data += conn.recv(4*1024)
+                encrypted_frame_data = data[:msg_size]
+                data = data[msg_size:]
+
+                frame_bytes = fernet.decrypt(encrypted_frame_data)
+
+                # Decode JPEG bytes
+                nparr = np.frombuffer(frame_bytes, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                if frame is not None:
+                    cv2.imshow('Peer Video', frame)
+                if cv2.waitKey(1) == 13:
+                    break
+            except Exception:
+                break
+
+    t_send = threading.Thread(target=send_video, daemon=True)
+    t_recv = threading.Thread(target=receive_video, daemon=True)
+    t_send.start()
+    t_recv.start()
+
+    print("Press Enter in the video window or terminal to exit.")
+    input()
+    conn.close()
+    host_socket.close()
+    cap.release()
+    cv2.destroyAllWindows()
+    print("Video call ended.")
+
+def run_video_call_client():
+    try:
+        import cv2
+        import imutils
+        import numpy as np
+    except ImportError:
+        print("[ERROR] OpenCV or Imutils not found. Please install with: pip install opencv-python imutils")
+        return
+
+    print("\n[VIDEO CALL CLIENT] Connecting to video host...")
+    host_ip = input("Enter host video IP Address: ").strip()
+    try:
+        host_port = int(input("Enter host video Port (e.g., 7000): ").strip())
+    except ValueError:
+        print("[ERROR] Port must be a number!")
+        return
+
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        client_socket.connect((host_ip, host_port))
+    except Exception as e:
+        print(f"[ERROR] Connection failed: {e}")
+        return
+
+    print("[INFO] Connected to video host. Performing handshake...")
+
+    # Handshake
+    session_key = perform_secure_handshake_client(client_socket)
+    if not session_key:
+        print("[ERROR] Handshake failed.")
+        client_socket.close()
+        return
+    fernet = Fernet(session_key)
+    print("[INFO] Handshake secure. Starting encrypted video call...")
+
+    cap = cv2.VideoCapture(0)
+
+    def send_video():
+        while cap.isOpened():
+            try:
+                ret, frame = cap.read()
+                if not ret: break
+                frame = imutils.resize(frame, width=320)
+
+                # Convert to JPEG bytes instead of pickle
+                _, buffer = cv2.imencode('.jpg', frame)
+                frame_bytes = buffer.tobytes()
+
+                encrypted = fernet.encrypt(frame_bytes)
+
+                message = struct.pack("Q", len(encrypted)) + encrypted
+                client_socket.sendall(message)
+                cv2.imshow('My Video (Client)', frame)
+                if cv2.waitKey(1) == 13:
+                    break
+            except Exception:
+                break
+        client_socket.close()
+
+    def receive_video():
+        data = b""
+        payload_size = struct.calcsize("Q")
+        while True:
+            try:
+                while len(data) < payload_size:
+                    packet = client_socket.recv(4*1024)
+                    if not packet: return
+                    data += packet
+                packed_msg_size = data[:payload_size]
+                data = data[payload_size:]
+                msg_size = struct.unpack("Q", packed_msg_size)[0]
+
+                while len(data) < msg_size:
+                    data += client_socket.recv(4*1024)
+                encrypted_frame_data = data[:msg_size]
+                data = data[msg_size:]
+
+                frame_bytes = fernet.decrypt(encrypted_frame_data)
+
+                # Decode JPEG bytes
+                nparr = np.frombuffer(frame_bytes, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                if frame is not None:
+                    cv2.imshow('Peer Video', frame)
+                if cv2.waitKey(1) == 13:
+                    break
+            except Exception:
+                break
+
+    t_send = threading.Thread(target=send_video, daemon=True)
+    t_recv = threading.Thread(target=receive_video, daemon=True)
+    t_send.start()
+    t_recv.start()
+
+    print("Press Enter in the video window or terminal to exit.")
+    input()
+    client_socket.close()
+    cap.release()
+    cv2.destroyAllWindows()
+    print("Video call ended.")
+
 
 def run_web_app():
     """Run the web application."""
@@ -554,11 +883,15 @@ def run_host():
         conn.sendall(b"[AUTH_OK]")
         print("[INFO] Client authenticated successfully.")
 
-    session_key = generate_session_key()
-    time.sleep(0.5)
-    conn.sendall(session_key)
+    # --- Handshake for Main Chat ---
+    session_key = perform_secure_handshake_server(conn)
+    if not session_key:
+        print("[ERROR] Handshake failed.")
+        conn.close()
+        return
     fernet = load_fernet(session_key)
-    print("[INFO] Secure session established. Let the chat begin!")
+    print("[INFO] Secure session established (RSA/AES). Let the chat begin!")
+
     threading.Thread(target=chat_listener, args=(conn, fernet), daemon=True).start()
     chat_sender(conn, fernet)
 
@@ -594,9 +927,16 @@ def run_client():
         settings = load_settings()
         settings["last_connection"] = {"host_ip": host_ip, "host_port": host_port}
         save_settings(settings)
-        session_key = client_socket.recv(1024)
+
+        # --- Handshake for Main Chat ---
+        session_key = perform_secure_handshake_client(client_socket)
+        if not session_key:
+            print("[ERROR] Handshake failed.")
+            client_socket.close()
+            return
         fernet = load_fernet(session_key)
-        print("[INFO] Secure session established with host. You may now chat!")
+        print("[INFO] Secure session established (RSA/AES). You may now chat!")
+
         threading.Thread(target=chat_listener, args=(client_socket, fernet), daemon=True).start()
         chat_sender(client_socket, fernet)
 
@@ -631,9 +971,16 @@ def run_client_last():
         else:
             print("[ERROR] Unexpected authentication response.")
             return
-        session_key = client_socket.recv(1024)
+
+        # --- Handshake for Main Chat ---
+        session_key = perform_secure_handshake_client(client_socket)
+        if not session_key:
+            print("[ERROR] Handshake failed.")
+            client_socket.close()
+            return
         fernet = load_fernet(session_key)
-        print("[INFO] Secure session established with host. You may now chat!")
+        print("[INFO] Secure session established (RSA/AES). You may now chat!")
+
         threading.Thread(target=chat_listener, args=(client_socket, fernet), daemon=True).start()
         chat_sender(client_socket, fernet)
 
@@ -703,11 +1050,16 @@ def run_host_gui():
     else:
         conn.sendall(b"[AUTH_OK]")
         print("[INFO] Client authenticated successfully.")
-    session_key = generate_session_key()
-    time.sleep(0.5)
-    conn.sendall(session_key)
+
+    # --- Handshake for Main Chat ---
+    session_key = perform_secure_handshake_server(conn)
+    if not session_key:
+        print("[ERROR] Handshake failed.")
+        conn.close()
+        return
     fernet = load_fernet(session_key)
-    print("[INFO] Secure session established. Let the chat begin!")
+    print("[INFO] Secure session established (RSA/AES). Let the chat begin!")
+
     chat_gui = ChatGUI(conn, fernet)
     threading.Thread(target=gui_chat_listener, args=(conn, fernet, chat_gui), daemon=True).start()
     chat_gui.start()
@@ -743,9 +1095,16 @@ def run_client_gui():
     else:
         print("[ERROR] Unexpected authentication response.")
         return
-    session_key = client_socket.recv(1024)
+
+    # --- Handshake for Main Chat ---
+    session_key = perform_secure_handshake_client(client_socket)
+    if not session_key:
+        print("[ERROR] Handshake failed.")
+        client_socket.close()
+        return
     fernet = load_fernet(session_key)
-    print("[INFO] Secure session established with host.")
+    print("[INFO] Secure session established (RSA/AES).")
+
     chat_gui = ChatGUI(client_socket, fernet)
     threading.Thread(target=gui_chat_listener, args=(client_socket, fernet, chat_gui), daemon=True).start()
     chat_gui.start()
@@ -766,6 +1125,8 @@ def main():
     parser.add_argument("--web", action="store_true", help="Start Web Interface")
     parser.add_argument("--voice-host", action="store_true", help="Host Voice Call")
     parser.add_argument("--voice-join", action="store_true", help="Join Voice Call")
+    parser.add_argument("--video-host", action="store_true", help="Host Video Call")
+    parser.add_argument("--video-join", action="store_true", help="Join Video Call")
     parser.add_argument("--update", action="store_true", help="Update AGC")
 
     args = parser.parse_args()
@@ -788,6 +1149,10 @@ def main():
         run_voice_call_host()
     elif args.voice_join:
         run_voice_call_client()
+    elif args.video_host:
+        run_video_call_host()
+    elif args.video_join:
+        run_video_call_client()
     else:
         # Interactive Menu
         print_banner()
@@ -797,9 +1162,11 @@ def main():
         print("  3. Host a chat session (GUI Mode)")
         print("  4. Connect to a chat session (GUI Mode)")
         print("  5. Connect to last session (Console Mode)")
-        print("  6. Start voice call (Console Mode, Host)")
-        print("  7. Join voice call (Console Mode, Client)")
-        print("  8. Start Web Interface")
+        print("  6. Start voice call (Host)")
+        print("  7. Join voice call (Client)")
+        print("  8. Start video call (Host)")
+        print("  9. Join video call (Client)")
+        print("  10. Start Web Interface")
         print("  0. Exit")
 
         choice = input("\nEnter choice: ").strip()
@@ -818,6 +1185,10 @@ def main():
         elif choice == "7":
             run_voice_call_client()
         elif choice == "8":
+            run_video_call_host()
+        elif choice == "9":
+            run_video_call_client()
+        elif choice == "10":
             run_web_app()
         elif choice == "0":
             print("Goodbye!")

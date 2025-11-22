@@ -99,6 +99,19 @@ body {
     font-size: 1.2rem;
 }
 
+.controls button {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    margin-right: 10px;
+    color: var(--text-color);
+}
+
+.controls button:hover {
+    color: var(--primary-color);
+}
+
 .status-indicator {
     width: 10px;
     height: 10px;
@@ -118,6 +131,23 @@ body {
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+
+/* Video Area */
+.video-area {
+    padding: 10px;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    height: 200px;
+}
+
+video {
+    max-width: 45%;
+    height: 100%;
+    background: #333;
+    border-radius: 8px;
 }
 
 .message {
@@ -169,6 +199,13 @@ body {
     display: block;
     margin-bottom: 2px;
     color: #aaa;
+}
+
+.file-link {
+    color: white;
+    text-decoration: underline;
+    font-weight: bold;
+    cursor: pointer;
 }
 
 .chat-input-area {

@@ -24,11 +24,23 @@
     <div class="app-container" style="display: none;" id="app-container">
         <header class="chat-header">
             <h1>AGC Web Chat</h1>
+            <div class="controls">
+                <input type="file" id="file-input" style="display: none;">
+                <button id="file-btn" title="Send File">📁</button>
+                <button id="video-btn" title="Start Video Call">📹</button>
+            </div>
             <div class="status-indicator online"></div>
         </header>
 
         <div id="chat-box" class="chat-box">
             <!-- Messages will appear here -->
+        </div>
+
+        <!-- Video Call Area (Hidden by default) -->
+        <div id="video-area" class="video-area" style="display: none;">
+            <video id="localVideo" autoplay playsinline muted></video>
+            <video id="remoteVideo" autoplay playsinline></video>
+            <button id="hangup-btn">End Call</button>
         </div>
 
         <div class="chat-input-area">
