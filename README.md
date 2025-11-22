@@ -1,121 +1,102 @@
 
+---
+
+# **AGC (Advanced Secure Chat)**
+
+AGC is a **secure, multi-functional chat ecosystem** designed for privacy and versatility. Whether you prefer a command-line interface, a graphical desktop app, or a web browser experience, AGC has you covered with end-to-end encryption, file sharing, and high-quality video/voice calling.
+
+## **Key Features**
+
+*   🔒 **End-to-End Encryption** – Chats are secured using **Fernet (AES-128)** with **RSA Key Exchange**.
+*   🔄 **Multi-Platform Access** – Windows, Linux, macOS, and Android support.
+*   📎 **File Sharing** – Securely transfer files between peers directly within the chat.
+*   🔊 **Voice Calls** – Real-time encrypted voice communication.
+*   📹 **Video Calls** – Encrypted video calls via OpenCV (Desktop) or WebRTC (Web).
+*   🌍 **NAT Traversal** – Automatic UPnP support for easy hosting.
+*   🕸️ **Modern Web UI** – A sleek, dark-themed web interface (PWA ready).
 
 ---
 
-# **AGC - 
+## **Installation & Build**
 
-AGC is a **secure, multi-user chat system** offering **CLI, GUI, and Web interfaces**. Designed for **real-time conversations**, AGC supports **persistent chat history**, **file transfers**, and **voice calling**.
+### **Desktop (Windows, Linux, macOS)**
 
-## **Features**
-- 🔒 **Secure Chat** – Messages are encrypted using **Fernet** for privacy.
-- 🔄 **Unified Login** – Enter a **chat nickname** and a **shared session password** to join.
-- 💾 **Persistent Chat History** – Chats are stored and loaded in GUI & Web modes.
-- 📎 **File Transfers** – Share files securely during conversations.
-- 🔊 **Voice Call Support** – High-quality **real-time audio communication** via PyAudio.
-- 🌎 **Web Chat Interface** – Browser-based **Flask-SocketIO chat** with login, history, and a "+" button to add details.
-- 🖥️ **GUI Mode** – A **Tkinter-powered chat window** for intuitive interactions.
-- ⚙️ **NAT Assistance** – Detects **public IP** and configures **UPnP port mapping**.
-- ⚡ **Fast & Lightweight** – Simple and efficient, built for seamless group chats.
-
----
-
-## **Installation**
-First, install **AGC** via pip:
-
+#### **1. Quick Install via Pip**
 ```bash
 pip install agc
 ```
 
-### **Optional Extras**
-To enable additional features:
-- **Voice Call Support:**  
-  ```bash
-  pip install agc[voice]```
-- **Web Chat Interface:**  
-  ```bash
-  pip install agc[web]```
-- **Full Installation (Voice & Web):**  
-  ```bash
-  pip install agc[full]```
+#### **2. Build Executable (Standalone)**
+You can create a standalone executable (`.exe`, binary, or `.app`) that runs without Python installed.
 
----
+1.  Clone the repo and install dependencies:
+    ```bash
+    git clone https://github.com/thugsoftechz/agc.git
+    cd agc
+    pip install -r requirements.txt
+    pip install pyinstaller
+    ```
+2.  Run the build script:
+    ```bash
+    python build_app.py
+    ```
+3.  The executable will be in the `dist/` folder.
 
-## **Usage**
-
-### **CLI Mode**
-Run AGC and choose an option:
-
-```bash
-agc
-```
-
-You can:
-1️⃣ **Host a chat session**  
-2️⃣ **Join a chat session**  
-3️⃣ **Start a voice call**  
-4️⃣ **Reconnect to the last session**  
-
-### **Web Mode**
-Run the Web interface:
+#### **3. Install Shortcuts (Start Menu/Desktop)**
+To add AGC to your system's application menu/desktop:
 
 ```bash
-python app.py
-```
-
-Then open **[http://localhost:5000](http://localhost:5000)** in your browser.  
-Log in with your **chat nickname** and **session password** to access the chat.  
-Previous chat history is loaded automatically.
-
-### **GUI Mode**
-Run **AGC GUI** with persistent chat history:
-
-```bash
-agc --gui
-```
-
-Enjoy a **friendly, interactive chat window** with a **plus ("+") button** to add details.
-
-### **Voice Call**
-Start or join a voice call:
-
-```bash
-agc --voice
-```
-
-You'll connect to a **real-time audio chat** with other participants.
-
----
-
-## **Updating AGC**
-If installed from Git, update with:
-
-```bash
-agc update
+python install.py
 ```
 
 ---
 
-## **System Requirements**
-AGC runs on:
-- **Windows, Linux, macOS** ✅
-- Python **3.8+**
-- Recommended dependencies: `cryptography`, `pyperclip`, `miniupnpc`, `pyaudio`, `flask`, `flask-socketio`
+### **Android Support**
+AGC supports Android via **Termux** (native Python) or the **Web Interface** (PWA).
+
+See **[ANDROID_README.md](ANDROID_README.md)** for detailed instructions.
 
 ---
 
-## **Contributing**
-Want to improve AGC?  
-Fork the repo and send a pull request! 🚀  
-For major changes, open an issue to discuss.
-<!-- GitAds-Verify: WQWAW8CCB8LY4ZV45DPQ5S8UVJ2RFZ5I -->
+## **Usage Guide**
+
+### **Interactive Mode**
+Simply run the command (or double-click the executable):
+```bash
+python agc.py  # OR ./dist/AGC
+```
+You will be presented with a menu to choose your desired mode.
+
+### **1. Secure Chat**
+*   **Host:** Generates an RSA key pair and waits for a client.
+*   **Client:** Connects, generates a session key, and encrypts it with the Host's public key.
+*   **Result:** A secure AES-128 encrypted channel for text and files.
+
+### **2. Encrypted Voice/Video Calls**
+*   **Voice:** Runs on Port 6000. Audio chunks are encrypted with Fernet before transmission.
+*   **Video:** Runs on Port 7000. Video frames are JPEG-encoded, encrypted, and sent over TCP.
+
+### **3. Web Interface (LAN)**
+*   Run `python agc.py --web`.
+*   Open `http://localhost:5000` in your browser.
+*   Supports **Video Calls (WebRTC)** and **File Sharing**.
 
 ---
 
-### **Final Notes**
-- **Simplified Login** – Use **chat nickname** and **session password** for **seamless connections**.
-- **Persistent History** – Chat logs load automatically in **Web & GUI interfaces**.
-- **Integrated Features** – **Text, voice, file sharing** built into **one platform**.
+## **Troubleshooting**
 
-## GitAds Sponsored
-[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=thugsoftechz/agc@github)](https://gitads.dev/v1/ad-track?source=thugsoftechz/agc@github)
+### **Connection Issues**
+*   **Firewall:** Allow ports 5000 (Chat), 6000 (Voice), and 7000 (Video).
+*   **NAT:** Use UPnP or manually forward ports if connecting over the internet.
 
+### **Video/Audio Issues**
+*   **Dependencies:** Ensure `opencv-python` and `pyaudio` are installed.
+*   **Permissions:** Grant camera/microphone access to your terminal or browser.
+
+---
+
+### **License**
+This project is open-source and available for educational and personal use.
+
+---
+*Created by [ThugsOfTechz](https://github.com/thugsoftechz)*

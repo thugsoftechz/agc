@@ -1,18 +1,65 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>AGC Chat Website</title>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGC - Secure Web Chat</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#00a884">
     <link rel="stylesheet" href="/static/css/style.css">
-    <!-- Include Socket.IO client from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(reg => console.log('Service Worker Registered', reg))
+          .catch(err => console.log('Service Worker Failed', err));
+      }
+    </script>
+</head>
+<body>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <h2>Welcome to AGC</h2>
+            <p>Enter your nickname to join the secure chat.</p>
+            <input type="text" id="username-input" placeholder="Nickname" autocomplete="off">
+            <button id="join-btn">Join Chat</button>
+        </div>
+    </div>
+
+    <!-- Chat Container -->
+    <div class="app-container" style="display: none;" id="app-container">
+        <header class="chat-header">
+            <h1>AGC Web Chat</h1>
+            <div class="controls">
+                <input type="file" id="file-input" style="display: none;">
+                <button id="file-btn" title="Send File">📁</button>
+                <button id="video-btn" title="Start Video Call">📹</button>
+            </div>
+            <!-- Status indicator removed from header to reduce clutter, fingerprint shown in chat -->
+        </header>
+
+        <div id="chat-box" class="chat-box">
+            <!-- Messages will appear here -->
+        </div>
+
+        <!-- Video Call Area (Hidden by default) -->
+        <div id="video-area" class="video-area" style="display: none;">
+            <video id="localVideo" autoplay playsinline muted></video>
+            <video id="remoteVideo" autoplay playsinline></video>
+            <button id="hangup-btn">End Call</button>
+        </div>
+
+        <div class="chat-input-area">
+            <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+            <button id="send-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </div>
+    </div>
+
     <script src="/static/js/main.js"></script>
-  </head>
-  <body>
-    <h1>Welcome to AGC Chat</h1>
-    <div id="chat"></div>
-    <br>
-    <input type="text" id="messageInput" placeholder="Type your message...">
-    <button id="sendButton">Send</button>
-  </body>
+</body>
 </html>

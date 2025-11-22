@@ -2,11 +2,11 @@ from setuptools import setup
 
 setup(
     name="agc",
-    version="0.4.0",  # Updated version reflecting added features
+    version="0.5.0",  # Major update: Video/Audio Call & Web Features
     author="Priyanshu",
     description=(
-        "A secure, user-friendly CLI chat application with clipboard integration "
-        "and NAT assistance, with optional voice call and web interface features."
+        "A secure, user-friendly chat application with CLI, GUI, and Web interfaces. "
+        "Features E2E encryption, file transfer, voice calls, and video calls."
     ),
     py_modules=["agc"],
     install_requires=[
@@ -16,8 +16,9 @@ setup(
     ],
     extras_require={
         "voice": ["pyaudio"],
-        "web": ["flask", "flask-socketio"],
-        "all": ["pyaudio", "flask", "flask-socketio"],
+        "video": ["opencv-python", "imutils", "numpy"],
+        "web": ["flask", "flask-socketio", "eventlet"],
+        "all": ["pyaudio", "flask", "flask-socketio", "eventlet", "opencv-python", "imutils", "numpy"],
     },
     entry_points={
         "console_scripts": [

@@ -1,1 +1,8 @@
-agc.py
+__pycache__/
+*.pyc
+*.log
+*.DS_Store
+env/
+venv/
+.idea/
+.vscode/
