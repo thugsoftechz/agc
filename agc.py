@@ -8,6 +8,7 @@ import getpass
 import time
 import subprocess
 import urllib.request
+import argparse
 from cryptography.fernet import Fernet
 
 # Ensure required dependencies are installed
@@ -19,8 +20,11 @@ def ensure_dependencies():
         try:
             __import__(module)
         except ImportError:
-            print(f"[INFO] Module '{module}' not found. Installing...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", module])
+            print(f"[INFO] Module '{module}' not found. Attempting to install...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", module])
+            except subprocess.CalledProcessError:
+                print(f"[WARN] Failed to install {module}. Some features may not work.")
 
 ensure_dependencies()
 
@@ -29,7 +33,8 @@ try:
     import tkinter as tk
     from tkinter import scrolledtext, filedialog, messagebox
 except ImportError:
-    print("[ERROR] tkinter is not installed. GUI functionality will not be available.")
+    tk = None
+    print("[WARN] tkinter is not installed. GUI functionality will not be available.")
 
 # ------------------------- Update Functionality -------------------------
 def update_agc():
@@ -339,9 +344,13 @@ def gui_chat_listener(conn, fernet, gui):
             break
 
 # ------------------------- Voice Call Feature -------------------------
-# This part uses PyAudio to stream audio on a separate TCP channel (default port 6000).
 def run_voice_call_host():
-    import pyaudio
+    try:
+        import pyaudio
+    except ImportError:
+        print("[ERROR] PyAudio is not installed. Please install it to use voice calling features.")
+        return
+
     print("\n[VOICE CALL HOST] Starting voice call session...")
     VOICE_PORT = 6000
     host_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -405,7 +414,12 @@ def run_voice_call_host():
     print("Voice call ended.")
 
 def run_voice_call_client():
-    import pyaudio
+    try:
+        import pyaudio
+    except ImportError:
+        print("[ERROR] PyAudio is not installed. Please install it to use voice calling features.")
+        return
+
     print("\n[VOICE CALL CLIENT] Connecting to voice call host...")
     try:
         host_ip = input("Enter host voice call IP Address: ").strip()
@@ -460,6 +474,15 @@ def run_voice_call_client():
     client_socket.close()
     p.terminate()
     print("Voice call ended.")
+
+def run_web_app():
+    """Run the web application."""
+    try:
+        print("[INFO] Starting Web Interface on http://0.0.0.0:5000")
+        from app import socketio, app
+        socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+    except ImportError:
+        print("[ERROR] Web dependencies not found. Please install 'flask' and 'flask-socketio'.")
 
 # ------------------------- Main Application Modes -------------------------
 def run_host():
@@ -616,6 +639,9 @@ def run_client_last():
 
 def run_host_gui():
     """Run as Host (GUI Mode)."""
+    if not tk:
+        print("[ERROR] Tkinter not found. Cannot run GUI mode.")
+        return
     HOST = ''
     DEFAULT_PORT = 5000
     PORT = DEFAULT_PORT
@@ -688,6 +714,9 @@ def run_host_gui():
 
 def run_client_gui():
     """Run as Client (GUI Mode)."""
+    if not tk:
+        print("[ERROR] Tkinter not found. Cannot run GUI mode.")
+        return
     print("\n[CLIENT MODE - GUI] Enter host connection details.")
     host_ip = input("Host IP Address: ").strip()
     try:
@@ -723,39 +752,78 @@ def run_client_gui():
 
 def print_banner():
     """Display a simple welcome banner."""
-    print("\nWelcome to AGC\n")
+    print("\n" + "="*40)
+    print("      Welcome to AGC (Secure Chat)      ")
+    print("="*40 + "\n")
 
 # ------------------------- Main Entry Point -------------------------
 def main():
-    if len(sys.argv) > 1 and sys.argv[1].lower() == "update":
+    parser = argparse.ArgumentParser(description="AGC: Advanced Secure Chat Tool")
+    parser.add_argument("--host", action="store_true", help="Host a chat session (Console)")
+    parser.add_argument("--join", action="store_true", help="Join a chat session (Console)")
+    parser.add_argument("--gui-host", action="store_true", help="Host a chat session (GUI)")
+    parser.add_argument("--gui-join", action="store_true", help="Join a chat session (GUI)")
+    parser.add_argument("--web", action="store_true", help="Start Web Interface")
+    parser.add_argument("--voice-host", action="store_true", help="Host Voice Call")
+    parser.add_argument("--voice-join", action="store_true", help="Join Voice Call")
+    parser.add_argument("--update", action="store_true", help="Update AGC")
+
+    args = parser.parse_args()
+
+    if args.update:
         update_agc()
         sys.exit(0)
-    print_banner()
-    print("Select an option:")
-    print("  1. Host a chat session (Console Mode)")
-    print("  2. Connect to a chat session (Console Mode)")
-    print("  3. Host a chat session (GUI Mode)")
-    print("  4. Connect to a chat session (GUI Mode)")
-    print("  5. Connect to last session (Console Mode)")
-    print("  6. Start voice call (Console Mode, Host)")
-    print("  7. Join voice call (Console Mode, Client)")
-    choice = input("\nEnter 1, 2, 3, 4, 5, 6, or 7: ").strip()
-    if choice == "1":
+
+    if args.host:
         run_host()
-    elif choice == "2":
+    elif args.join:
         run_client()
-    elif choice == "3":
+    elif args.gui_host:
         run_host_gui()
-    elif choice == "4":
+    elif args.gui_join:
         run_client_gui()
-    elif choice == "5":
-        run_client_last()
-    elif choice == "6":
+    elif args.web:
+        run_web_app()
+    elif args.voice_host:
         run_voice_call_host()
-    elif choice == "7":
+    elif args.voice_join:
         run_voice_call_client()
     else:
-        print("[ERROR] Invalid choice. Please restart and select a valid option.")
+        # Interactive Menu
+        print_banner()
+        print("Select an option:")
+        print("  1. Host a chat session (Console Mode)")
+        print("  2. Connect to a chat session (Console Mode)")
+        print("  3. Host a chat session (GUI Mode)")
+        print("  4. Connect to a chat session (GUI Mode)")
+        print("  5. Connect to last session (Console Mode)")
+        print("  6. Start voice call (Console Mode, Host)")
+        print("  7. Join voice call (Console Mode, Client)")
+        print("  8. Start Web Interface")
+        print("  0. Exit")
+
+        choice = input("\nEnter choice: ").strip()
+        if choice == "1":
+            run_host()
+        elif choice == "2":
+            run_client()
+        elif choice == "3":
+            run_host_gui()
+        elif choice == "4":
+            run_client_gui()
+        elif choice == "5":
+            run_client_last()
+        elif choice == "6":
+            run_voice_call_host()
+        elif choice == "7":
+            run_voice_call_client()
+        elif choice == "8":
+            run_web_app()
+        elif choice == "0":
+            print("Goodbye!")
+            sys.exit(0)
+        else:
+            print("[ERROR] Invalid choice. Use --help for command line usage.")
 
 if __name__ == "__main__":
     main()
