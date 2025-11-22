@@ -8,23 +8,37 @@ import getpass
 import time
 import subprocess
 import urllib.request
+import struct
 from cryptography.fernet import Fernet
 
 # Ensure required dependencies are installed
-REQUIRED_MODULES = ["cryptography", "pyperclip", "miniupnpc", "pyaudio"]
+REQUIRED_MODULES = ["cryptography", "pyperclip", "miniupnpc", "pyaudio", "opencv-python"]
 
 def ensure_dependencies():
     """Ensure required dependencies are installed."""
     for module in REQUIRED_MODULES:
         try:
-            __import__(module)
+            if module == "opencv-python":
+                import cv2
+            else:
+                __import__(module)
         except ImportError:
             print(f"[INFO] Module '{module}' not found. Installing...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", module])
 
 ensure_dependencies()
 
-# Import tkinter for GUI functionality
+# Import optional libraries
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+try:
+    import pyaudio
+except ImportError:
+    pyaudio = None
+
 try:
     import tkinter as tk
     from tkinter import scrolledtext, filedialog, messagebox
@@ -34,8 +48,7 @@ except ImportError:
 # ------------------------- Update Functionality -------------------------
 def update_agc():
     """
-    Update the AGC application from the GitHub repository:
-    https://github.com/thugsoftechz/agc.
+    Update the AGC application from the GitHub repository.
     """
     print("[INFO] Attempting to update AGC from https://github.com/thugsoftechz/agc ...")
     if os.path.exists(".git"):
@@ -95,20 +108,50 @@ def load_fernet(session_key):
     """Return a Fernet object for the given session key."""
     return Fernet(session_key)
 
-def encrypt_message(fernet, message: bytes) -> bytes:
-    """Encrypt a given message (in bytes)."""
-    return fernet.encrypt(message)
+class SecureConnection:
+    """Helper class for secure, framed communication."""
+    def __init__(self, socket, fernet):
+        self.socket = socket
+        self.fernet = fernet
 
-def decrypt_message(fernet, token: bytes) -> bytes:
-    """Attempt to decrypt the token; return an error message on failure."""
-    try:
-        return fernet.decrypt(token)
-    except Exception:
-        return b"[ERROR: Unable to decrypt message]"
+    def send(self, data: bytes):
+        """Encrypts and sends data with a length header."""
+        try:
+            encrypted = self.fernet.encrypt(data)
+            length = len(encrypted)
+            self.socket.sendall(length.to_bytes(4, byteorder='big'))
+            self.socket.sendall(encrypted)
+            return True
+        except Exception as e:
+            print(f"[ERROR] Secure send failed: {e}")
+            return False
 
-# ----- Framing Helper Functions -----
+    def recv(self):
+        """Receives a length header, then the body, and decrypts it."""
+        try:
+            header = self._recvall(4)
+            if not header:
+                return None
+            length = int.from_bytes(header, byteorder='big')
+            encrypted = self._recvall(length)
+            if not encrypted:
+                return None
+            return self.fernet.decrypt(encrypted)
+        except Exception as e:
+            print(f"[ERROR] Secure recv failed: {e}")
+            return None
+
+    def _recvall(self, n):
+        data = b""
+        while len(data) < n:
+            packet = self.socket.recv(n - len(data))
+            if not packet:
+                return None
+            data += packet
+        return data
+
+# ----- Legacy Framing Helper Functions (for backward compatibility in Chat) -----
 def recvall(conn, n):
-    """Receive exactly n bytes from the socket, or None if closed."""
     data = b""
     while len(data) < n:
         packet = conn.recv(n - len(data))
@@ -118,17 +161,11 @@ def recvall(conn, n):
     return data
 
 def send_encrypted(conn, token: bytes):
-    """
-    Send an encrypted token with a 4-byte header indicating its length.
-    """
     token_length = len(token)
     conn.sendall(token_length.to_bytes(4, byteorder='big'))
     conn.sendall(token)
 
 def recv_encrypted(conn):
-    """
-    Receive an encrypted token; first read a 4-byte length header.
-    """
     header = recvall(conn, 4)
     if not header:
         return None
@@ -136,30 +173,35 @@ def recv_encrypted(conn):
     token = recvall(conn, token_length)
     return token
 
+def encrypt_message(fernet, message: bytes) -> bytes:
+    return fernet.encrypt(message)
+
+def decrypt_message(fernet, token: bytes) -> bytes:
+    try:
+        return fernet.decrypt(token)
+    except Exception:
+        return b"[ERROR: Unable to decrypt message]"
+
 SETTINGS_FILE = "chat_settings.json"
 CHAT_HISTORY_FILE = "chat_history.log"
 
 def load_settings():
-    """Load settings from a JSON file; return defaults if it does not exist."""
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, "r") as f:
             return json.load(f)
     return {"chat_history": True, "contacts": {}}
 
 def save_settings(settings):
-    """Save settings to a JSON file."""
     with open(SETTINGS_FILE, "w") as f:
         json.dump(settings, f, indent=4)
 
 def log_chat(message: str):
-    """Append a message to the chat log if chat history is enabled."""
     settings = load_settings()
     if settings.get("chat_history", True):
         with open(CHAT_HISTORY_FILE, "a") as f:
             f.write(message + "\n")
 
 def send_file(fernet, conn, filename):
-    """Send a file securely using framing."""
     if not os.path.exists(filename):
         print(f"[ERROR] File '{filename}' not found.")
         return
@@ -175,7 +217,6 @@ def send_file(fernet, conn, filename):
         print(f"[ERROR] Failed to send file: {e}")
 
 def handle_received_data(fernet, token):
-    """Handle a complete encrypted token as a file or text message."""
     dec = decrypt_message(fernet, token)
     if dec.startswith(b"[FILE]"):
         try:
@@ -198,7 +239,6 @@ def handle_received_data(fernet, token):
             print("[ERROR] Unable to decode incoming message.")
 
 def chat_listener(conn, fernet):
-    """Continuously listen for incoming messages in CLI mode."""
     while True:
         try:
             token = recv_encrypted(conn)
@@ -211,7 +251,6 @@ def chat_listener(conn, fernet):
             break
 
 def chat_sender(conn, fernet):
-    """Read input from the terminal and send messages or files securely."""
     help_msg = (
         "\n[COMMANDS]\n"
         "  /file <path>   : Send a file\n"
@@ -264,7 +303,6 @@ class ChatGUI:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def append_message(self, msg):
-        """Append a message to the chat display."""
         def inner():
             self.text_area.config(state="normal")
             self.text_area.insert(tk.END, msg + "\n")
@@ -273,7 +311,6 @@ class ChatGUI:
         self.root.after(0, inner)
 
     def send_message(self, event=None):
-        """Send the text entered in the GUI."""
         msg = self.entry.get().strip()
         if msg:
             try:
@@ -285,7 +322,6 @@ class ChatGUI:
                 self.append_message("[ERROR] Failed to send message: " + str(e))
 
     def send_file(self):
-        """Launch a file dialog to choose and send a file."""
         filename = filedialog.askopenfilename()
         if filename:
             try:
@@ -309,7 +345,6 @@ class ChatGUI:
         self.root.mainloop()
 
 def gui_chat_listener(conn, fernet, gui):
-    """Continuously listen for messages in GUI mode."""
     while True:
         try:
             token = recv_encrypted(conn)
@@ -338,44 +373,112 @@ def gui_chat_listener(conn, fernet, gui):
             gui.append_message("[ERROR] Problem receiving data: " + str(e))
             break
 
-# ------------------------- Voice Call Feature -------------------------
-# This part uses PyAudio to stream audio on a separate TCP channel (default port 6000).
-def run_voice_call_host():
-    import pyaudio
-    print("\n[VOICE CALL HOST] Starting voice call session...")
-    VOICE_PORT = 6000
-    host_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    host_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    while True:
-        try:
-            host_socket.bind(('', VOICE_PORT))
-            break
-        except Exception as e:
-            print(f"[ERROR] Unable to bind voice call port {VOICE_PORT}: {e}")
-            new_port = input("Enter a different voice call port number: ").strip()
+# ------------------------- Common Media Call Functions -------------------------
+def establish_secure_media_connection(role, port, password_prompt=True):
+    """
+    Establishes a secure connection for media (voice/video).
+    Role: 'host' or 'client'
+    Returns: (SecureConnection object, socket object) or (None, None)
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    if role == 'host':
+        while True:
             try:
-                VOICE_PORT = int(new_port)
-            except ValueError:
-                print("[ERROR] Invalid port number. Please try again.")
-    host_socket.listen(1)
-    print(f"[INFO] Voice call host listening on port {VOICE_PORT}. Waiting for a connection...")
-    conn, addr = host_socket.accept()
-    print(f"[INFO] Connection established with {addr}. Starting voice call...")
+                sock.bind(('', port))
+                break
+            except Exception as e:
+                print(f"[ERROR] Unable to bind port {port}: {e}")
+                port_str = input("Enter a different port number: ").strip()
+                try:
+                    port = int(port_str)
+                except ValueError:
+                    print("Invalid port.")
+        sock.listen(1)
+        print(f"[INFO] Listening for media connection on port {port}...")
+        conn, addr = sock.accept()
+        print(f"[INFO] Media connection from {addr}")
+
+        # Handshake
+        if password_prompt:
+            stored_pass = load_settings().get("password")
+            if not stored_pass:
+                stored_pass = getpass.getpass("Set a session password for verification: ")
+
+            conn.sendall(b"[AUTH] Password?")
+            peer_pass = conn.recv(1024).decode().strip()
+            if peer_pass != stored_pass:
+                conn.sendall(b"[AUTH_FAIL]")
+                print("[ERROR] Auth failed.")
+                conn.close()
+                sock.close()
+                return None, None
+            conn.sendall(b"[AUTH_OK]")
+
+        session_key = generate_session_key()
+        conn.sendall(session_key)
+        fernet = load_fernet(session_key)
+        return SecureConnection(conn, fernet), conn
+
+    elif role == 'client':
+        host_ip = input("Enter Host IP: ").strip()
+        try:
+            host_port = int(input(f"Enter Host Port (default {port}): ").strip() or port)
+        except ValueError:
+            print("Invalid port.")
+            return None, None
+
+        try:
+            sock.connect((host_ip, host_port))
+        except Exception as e:
+            print(f"[ERROR] Connection failed: {e}")
+            return None, None
+
+        if password_prompt:
+            auth_req = sock.recv(1024)
+            if auth_req.startswith(b"[AUTH]"):
+                pwd = getpass.getpass("Enter session password: ").strip()
+                sock.sendall(pwd.encode())
+                auth_resp = sock.recv(1024)
+                if not auth_resp.startswith(b"[AUTH_OK]"):
+                    print("[ERROR] Auth failed.")
+                    sock.close()
+                    return None, None
+
+        session_key = sock.recv(1024)
+        fernet = load_fernet(session_key)
+        return SecureConnection(sock, fernet), sock
+
+# ------------------------- Voice Call Feature -------------------------
+def run_voice_call(role):
+    if pyaudio is None:
+        print("[ERROR] PyAudio not installed. Cannot run voice call.")
+        return
+
+    print(f"\n[VOICE CALL - {role.upper()}]")
+    secure_conn, raw_socket = establish_secure_media_connection(role, 6000)
+    if not secure_conn:
+        return
+
+    print("[INFO] Secure Voice Call Established.")
     p = pyaudio.PyAudio()
-    # Audio settings
     CHUNK = 1024
     FORMAT = pyaudio.paInt16
     CHANNELS = 1
     RATE = 16000
 
+    running = True
+
     def send_audio():
         stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
         try:
-            while True:
-                data = stream.read(CHUNK)
-                conn.sendall(data)
+            while running:
+                data = stream.read(CHUNK, exception_on_overflow=False)
+                if not secure_conn.send(data):
+                    break
         except Exception as e:
-            print("[ERROR] Audio sending error:", e)
+            print(f"[Voice] Send error: {e}")
         finally:
             stream.stop_stream()
             stream.close()
@@ -383,13 +486,13 @@ def run_voice_call_host():
     def receive_audio():
         stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
         try:
-            while True:
-                data = conn.recv(CHUNK)
+            while running:
+                data = secure_conn.recv()
                 if not data:
                     break
                 stream.write(data)
         except Exception as e:
-            print("[ERROR] Audio receiving error:", e)
+            print(f"[Voice] Recv error: {e}")
         finally:
             stream.stop_stream()
             stream.close()
@@ -398,68 +501,75 @@ def run_voice_call_host():
     t_recv = threading.Thread(target=receive_audio, daemon=True)
     t_send.start()
     t_recv.start()
+
     input("Press Enter to end the voice call...\n")
-    conn.close()
-    host_socket.close()
+    running = False
+    raw_socket.close()
     p.terminate()
     print("Voice call ended.")
 
-def run_voice_call_client():
-    import pyaudio
-    print("\n[VOICE CALL CLIENT] Connecting to voice call host...")
-    try:
-        host_ip = input("Enter host voice call IP Address: ").strip()
-        host_port = int(input("Enter host voice call Port (e.g., 6000): ").strip())
-    except ValueError:
-        print("[ERROR] Port must be a number!")
+# ------------------------- Video Call Feature -------------------------
+def run_video_call(role):
+    if cv2 is None:
+        print("[ERROR] OpenCV not installed. Cannot run video call.")
         return
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        client_socket.connect((host_ip, host_port))
-    except Exception as e:
-        print(f"[ERROR] Could not connect to voice call host: {e}")
-        return
-    print("[INFO] Connected to voice call host. Starting voice call...")
-    p = pyaudio.PyAudio()
-    CHUNK = 1024
-    FORMAT = pyaudio.paInt16
-    CHANNELS = 1
-    RATE = 16000
 
-    def send_audio():
-        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+    print(f"\n[VIDEO CALL - {role.upper()}]")
+    secure_conn, raw_socket = establish_secure_media_connection(role, 7000)
+    if not secure_conn:
+        return
+
+    print("[INFO] Secure Video Call Established. Press 'q' in the video window to exit.")
+    cap = cv2.VideoCapture(0)
+    running = True
+
+    def send_video():
         try:
-            while True:
-                data = stream.read(CHUNK)
-                client_socket.sendall(data)
+            while running and cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                # Resize to reduce bandwidth
+                frame = cv2.resize(frame, (640, 480))
+                # Encode as JPEG
+                _, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
+                data = buffer.tobytes()
+                if not secure_conn.send(data):
+                    break
+                time.sleep(0.05) # Limit FPS approx 20
         except Exception as e:
-            print("[ERROR] Audio sending error:", e)
-        finally:
-            stream.stop_stream()
-            stream.close()
+            print(f"[Video] Send error: {e}")
 
-    def receive_audio():
-        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
+    def receive_video():
+        import numpy as np
         try:
-            while True:
-                data = client_socket.recv(CHUNK)
+            while running:
+                data = secure_conn.recv()
                 if not data:
                     break
-                stream.write(data)
+                # Decode JPEG
+                nparr = np.frombuffer(data, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if frame is not None:
+                    cv2.imshow(f"Video Call ({role})", frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        # Signal exit logic here if needed, but better to use main thread input
+                        pass
         except Exception as e:
-            print("[ERROR] Audio receiving error:", e)
+            print(f"[Video] Recv error: {e}")
         finally:
-            stream.stop_stream()
-            stream.close()
+            cv2.destroyAllWindows()
 
-    t_send = threading.Thread(target=send_audio, daemon=True)
-    t_recv = threading.Thread(target=receive_audio, daemon=True)
+    t_send = threading.Thread(target=send_video, daemon=True)
+    t_recv = threading.Thread(target=receive_video, daemon=True)
     t_send.start()
     t_recv.start()
-    input("Press Enter to end the voice call...\n")
-    client_socket.close()
-    p.terminate()
-    print("Voice call ended.")
+
+    input("Press Enter to end the video call...\n")
+    running = False
+    cap.release()
+    raw_socket.close()
+    print("Video call ended.")
 
 # ------------------------- Main Application Modes -------------------------
 def run_host():
@@ -737,9 +847,11 @@ def main():
     print("  3. Host a chat session (GUI Mode)")
     print("  4. Connect to a chat session (GUI Mode)")
     print("  5. Connect to last session (Console Mode)")
-    print("  6. Start voice call (Console Mode, Host)")
-    print("  7. Join voice call (Console Mode, Client)")
-    choice = input("\nEnter 1, 2, 3, 4, 5, 6, or 7: ").strip()
+    print("  6. Start voice call (Host)")
+    print("  7. Join voice call (Client)")
+    print("  8. Start video call (Host)")
+    print("  9. Join video call (Client)")
+    choice = input("\nEnter choice (1-9): ").strip()
     if choice == "1":
         run_host()
     elif choice == "2":
@@ -751,9 +863,13 @@ def main():
     elif choice == "5":
         run_client_last()
     elif choice == "6":
-        run_voice_call_host()
+        run_voice_call('host')
     elif choice == "7":
-        run_voice_call_client()
+        run_voice_call('client')
+    elif choice == "8":
+        run_video_call('host')
+    elif choice == "9":
+        run_video_call('client')
     else:
         print("[ERROR] Invalid choice. Please restart and select a valid option.")
 
