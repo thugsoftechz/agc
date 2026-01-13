@@ -10,15 +10,64 @@ from agc_lib import (
     setup_logging, check_dependencies, load_settings, save_settings
 )
 
+def establish_secure_session(conn, sec, is_host):
+    """
+    Performs the RSA handshake to establish a shared session key.
+
+    Args:
+        conn: The socket connection.
+        sec: The SecurityManager instance.
+        is_host: Boolean, True if acting as host (generates RSA keys).
+
+    Returns:
+        True if successful, False otherwise.
+    """
+    try:
+        if is_host:
+            # Host generates RSA keys and sends public key
+            pub_pem = sec.generate_rsa_keys()
+            print(f"Fingerprint: {sec.get_fingerprint(pub_pem)}")
+            NetworkManager.send_frame(conn, pub_pem)
+
+            # Host receives encrypted session key
+            enc_key = NetworkManager.recv_frame(conn)
+            if sec.decrypt_session_key(enc_key):
+                return True
+            else:
+                print("Failed to decrypt session key.")
+                return False
+        else:
+            # Client receives public key
+            pem = NetworkManager.recv_frame(conn)
+            print(f"Host Fingerprint: {sec.get_fingerprint(pem)}")
+
+            # Client generates session key and encrypts it with host's public key
+            sess_key = sec.create_session_key()
+            sec.set_session_key(sess_key)
+            enc_sess_key = sec.encrypt_session_key(pem, sess_key)
+            NetworkManager.send_frame(conn, enc_sess_key)
+            return True
+    except Exception as e:
+        print(f"Handshake error: {e}")
+        return False
+
 def run_host(args):
     net = NetworkManager()
     sec = SecurityManager()
-    port = 5000
+    port = args.port
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try: s.bind(('', port))
-    except: port = int(input("Port 5000 busy. Enter new port: ")) or 5000; s.bind(('', port))
+    try:
+        s.bind(('', port))
+    except OSError:
+        print(f"Port {port} is busy.")
+        try:
+            port = int(input("Enter new port: "))
+            s.bind(('', port))
+        except:
+            print("Invalid port or binding failed.")
+            return
     s.listen(1)
 
     stop_event = threading.Event()
@@ -30,7 +79,14 @@ def run_host(args):
     stop_event.set()
     print(f"Connected to {addr}")
 
-    # Auth
+    # Handshake
+    if not establish_secure_session(conn, sec, True):
+        print("Handshake Failed.")
+        conn.close()
+        return
+
+    # Secure Auth
+    print("Authenticating...")
     settings = load_settings()
     pw = settings.get("password")
     if not pw:
@@ -38,25 +94,26 @@ def run_host(args):
         settings["password"] = pw
         save_settings(settings)
 
-    conn.sendall(b"[AUTH]")
-    if conn.recv(1024).decode().strip() != pw:
-        conn.sendall(b"[FAIL]")
+    try:
+        NetworkManager.send_frame(conn, sec.encrypt(b"[AUTH]"))
+        enc_resp = NetworkManager.recv_frame(conn)
+        if not enc_resp: raise Exception("Connection closed")
+
+        resp = sec.decrypt(enc_resp).decode().strip()
+        if resp != pw:
+            print("Auth Failed: Incorrect Password")
+            NetworkManager.send_frame(conn, sec.encrypt(b"[FAIL]"))
+            conn.close()
+            return
+        NetworkManager.send_frame(conn, sec.encrypt(b"[OK]"))
+    except Exception as e:
+        print(f"Auth Error: {e}")
         conn.close()
         return
-    conn.sendall(b"[OK]")
 
-    # Handshake
-    pub_pem = sec.generate_rsa_keys()
-    print(f"Fingerprint: {sec.get_fingerprint(pub_pem)}")
-    NetworkManager.send_frame(conn, pub_pem)
-
-    enc_key = NetworkManager.recv_frame(conn)
-    if sec.decrypt_session_key(enc_key):
-        print("Secure Session Established.")
-        if args.gui_host: GUI(conn, sec).start()
-        else: CLI(conn, sec).start()
-    else:
-        print("Handshake Failed.")
+    print("Secure Session Established.")
+    if args.gui_host: GUI(conn, sec).start()
+    else: CLI(conn, sec).start()
 
 def run_client(args):
     net = NetworkManager()
@@ -69,24 +126,37 @@ def run_client(args):
         input("Press Enter to stop scan.\n"); stop.set()
 
     ip = input("Host IP: ").strip()
-    port = int(input("Port (5000): ").strip() or 5000)
+    port_input = input(f"Port ({args.port}): ").strip()
+    port = int(port_input) if port_input else args.port
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try: s.connect((ip, port))
     except Exception as e: print(f"Connection failed: {e}"); return
 
-    if s.recv(1024) == b"[AUTH]":
-        s.sendall(getpass.getpass("Password: ").encode())
-        if s.recv(1024) != b"[OK]": print("Auth Failed"); return
-
     # Handshake
-    pem = NetworkManager.recv_frame(s)
-    print(f"Host Fingerprint: {sec.get_fingerprint(pem)}")
+    if not establish_secure_session(s, sec, False):
+        print("Handshake Failed.")
+        s.close()
+        return
 
-    sess_key = sec.create_session_key()
-    sec.set_session_key(sess_key)
-    enc_sess_key = sec.encrypt_session_key(pem, sess_key)
-    NetworkManager.send_frame(s, enc_sess_key)
+    # Secure Auth
+    print("Authenticating...")
+    try:
+        challenge = NetworkManager.recv_frame(s)
+        if sec.decrypt(challenge) == b"[AUTH]":
+            pw = getpass.getpass("Password: ")
+            NetworkManager.send_frame(s, sec.encrypt(pw.encode()))
+
+            result = NetworkManager.recv_frame(s)
+            if sec.decrypt(result) != b"[OK]":
+                print("Auth Failed: Host rejected password.")
+                return
+        else:
+            print("Protocol Error: Expected AUTH")
+            return
+    except Exception as e:
+        print(f"Auth Error: {e}")
+        return
 
     print("Secure Session Established.")
     if args.gui_join: GUI(s, sec).start()
@@ -103,6 +173,7 @@ def main():
     parser.add_argument("--voice-join", action="store_true")
     parser.add_argument("--web", action="store_true")
     parser.add_argument("--install-deps", action="store_true")
+    parser.add_argument("--port", type=int, default=5000, help="Port to use for connection (default: 5000)")
     args = parser.parse_args()
 
     check_dependencies(args.install_deps)
@@ -117,24 +188,22 @@ def main():
         s.bind(('', 6000)); s.listen(1)
         c, a = s.accept()
         sec = SecurityManager()
-        # Quick handshake for voice
-        pub = sec.generate_rsa_keys()
-        NetworkManager.send_frame(c, pub)
-        key = NetworkManager.recv_frame(c)
-        sec.decrypt_session_key(key)
-        VoiceCall(sec).start(c)
+        if establish_secure_session(c, sec, True):
+            VoiceCall(sec).start(c)
+        else:
+            print("Voice Handshake Failed")
     elif args.voice_join:
         # Simplified voice client entry
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((input("Host IP: "), 6000))
         sec = SecurityManager()
-        pem = NetworkManager.recv_frame(s)
-        k = sec.create_session_key(); sec.set_session_key(k)
-        NetworkManager.send_frame(s, sec.encrypt_session_key(pem, k))
-        VoiceCall(sec).start(s)
+        if establish_secure_session(s, sec, False):
+            VoiceCall(sec).start(s)
+        else:
+            print("Voice Handshake Failed")
     elif args.web:
         from app import socketio, app
-        socketio.run(app, host='0.0.0.0', port=5000)
+        socketio.run(app, host='0.0.0.0', port=args.port)
     else:
         print("Use --help for options.")
 
