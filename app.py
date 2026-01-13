@@ -3,12 +3,13 @@ from flask_socketio import SocketIO, emit
 import datetime
 import os
 import hashlib
+import secrets
 
 # Import from new package structure if needed for backend logic
 from agc_lib import SecurityManager
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'agc_secret_key_change_this'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 CONNECTED_USERS = {}

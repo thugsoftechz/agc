@@ -1,0 +1,10 @@
+cryptography
+pyperclip
+miniupnpc
+pyaudio
+flask
+flask-socketio
+eventlet
+opencv-python
+imutils
+numpy
