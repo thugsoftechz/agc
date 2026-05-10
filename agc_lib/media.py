@@ -91,15 +91,27 @@ class VideoCall:
             data = b""
             while self.running:
                 try:
-                    while len(data) < payload_size:
-                        packet = conn.recv(4096)
-                        if not packet: return
-                        data += packet
+                    if len(data) < payload_size:
+                        chunks = [data]
+                        current_len = len(data)
+                        while current_len < payload_size:
+                            packet = conn.recv(4096)
+                            if not packet: return
+                            chunks.append(packet)
+                            current_len += len(packet)
+                        data = b"".join(chunks)
                     packed_msg_size = data[:payload_size]
                     data = data[payload_size:]
                     msg_size = struct.unpack("Q", packed_msg_size)[0]
-                    while len(data) < msg_size:
-                        data += conn.recv(4096)
+                    if len(data) < msg_size:
+                        chunks = [data]
+                        current_len = len(data)
+                        while current_len < msg_size:
+                            packet = conn.recv(4096)
+                            if not packet: return
+                            chunks.append(packet)
+                            current_len += len(packet)
+                        data = b"".join(chunks)
                     encrypted = data[:msg_size]
                     data = data[msg_size:]
                     frame_bytes = self.sec.decrypt(encrypted)

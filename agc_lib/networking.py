@@ -47,12 +47,14 @@ class NetworkManager:
 
     @staticmethod
     def recvall(conn, n):
-        data = b""
-        while len(data) < n:
-            packet = conn.recv(n - len(data))
+        chunks = []
+        current_len = 0
+        while current_len < n:
+            packet = conn.recv(n - current_len)
             if not packet: return None
-            data += packet
-        return data
+            chunks.append(packet)
+            current_len += len(packet)
+        return b"".join(chunks)
 
     @staticmethod
     def send_frame(conn, data):
