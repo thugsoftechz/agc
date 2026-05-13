@@ -6,3 +6,4 @@ env/
 venv/
 .idea/
 .vscode/
+agc.egg-info/
