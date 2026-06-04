@@ -91,11 +91,14 @@ class GUI:
         tk.Button(btn_frm, text="Send", command=self._send).pack(side=tk.LEFT)
         tk.Button(btn_frm, text="File", command=self._file).pack(side=tk.LEFT)
 
-    def _log(self, msg):
+    def _real_log(self, msg):
         self.txt.config(state='normal')
         self.txt.insert(tk.END, msg + "\n")
         self.txt.see(tk.END)
         self.txt.config(state='disabled')
+
+    def _log(self, msg):
+        self.root.after(0, self._real_log, msg)
 
     def _send(self, event=None):
         msg = self.entry.get().strip()
