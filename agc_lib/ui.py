@@ -129,11 +129,11 @@ class GUI:
                     # Simple save, real app should probably ask user or save to downloads
                     with open("recv_" + fname, "wb") as f:
                          f.write(dec[6:].split(b"::", 1)[1])
-                    self._log(f"Received file: recv_{fname}")
+                    self.root.after(0, self._log, f"Received file: recv_{fname}")
                 else:
-                    self._log(f"Peer: {dec.decode()}")
+                    self.root.after(0, self._log, f"Peer: {dec.decode()}")
             except: break
-        self._log("Disconnected.")
+        self.root.after(0, self._log, "Disconnected.")
 
     def start(self):
         import threading
