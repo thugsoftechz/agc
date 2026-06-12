@@ -8,6 +8,7 @@ setup(
         "A secure, user-friendly chat application with CLI, GUI, and Web interfaces. "
         "Features E2E encryption, file transfer, voice calls, and video calls."
     ),
+    packages=["agc_lib"],
     py_modules=["agc"],
     install_requires=[
         "cryptography",
