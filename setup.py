@@ -9,6 +9,7 @@ setup(
         "Features E2E encryption, file transfer, voice calls, and video calls."
     ),
     py_modules=["agc"],
+    packages=["agc_lib"],
     install_requires=[
         "cryptography",
         "pyperclip",
