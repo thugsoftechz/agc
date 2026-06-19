@@ -28,7 +28,11 @@ def build():
         'pyaudio',
         'cv2',
         'numpy',
-        'cryptography'
+        'cryptography',
+        'pyperclip',
+        'miniupnpc',
+        'imutils',
+        'flask'
     ]
 
     for hidden in hidden_imports:
