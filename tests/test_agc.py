@@ -23,3 +23,20 @@ def test_settings_load_save(tmp_path):
         loaded = load_settings()
         assert loaded["chat_history"] is False
         assert loaded["password"] == "test"
+
+def test_build_app_hidden_imports():
+    """Verify that build_app.py has the required hidden imports."""
+    build_app_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "build_app.py")
+    with open(build_app_path, "r") as f:
+        content = f.read()
+
+    required_imports = [
+        "'engineio.async_drivers.threading'",
+        "'pyperclip'",
+        "'miniupnpc'",
+        "'imutils'",
+        "'flask'"
+    ]
+
+    for req in required_imports:
+        assert req in content, f"Missing {req} in build_app.py hidden imports"
