@@ -23,12 +23,17 @@ def build():
 
     # Handling hidden imports for dynamic libraries
     hidden_imports = [
+        'engineio.async_drivers.threading',
         'engineio.async_drivers.eventlet',
         'flask_socketio',
         'pyaudio',
         'cv2',
         'numpy',
-        'cryptography'
+        'cryptography',
+        'pyperclip',
+        'miniupnpc',
+        'imutils',
+        'flask'
     ]
 
     for hidden in hidden_imports:
