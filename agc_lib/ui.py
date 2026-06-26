@@ -56,7 +56,7 @@ class CLI:
                 if msg.startswith("/file "):
                     self._send_file(msg.split(" ", 1)[1])
                 else:
-                    self.conn.sendall(len(self.sec.encrypt(msg.encode())).to_bytes(4, 'big') + self.sec.encrypt(msg.encode()))
+                    NetworkManager.send_frame(self.conn, self.sec.encrypt(msg.encode()))
                     log_chat(f"Me: {msg}")
             except: break
         self.conn.close()
@@ -68,7 +68,7 @@ class CLI:
         with open(path, "rb") as f:
             payload = b"[FILE]" + os.path.basename(path).encode() + b"::" + f.read()
         data = self.sec.encrypt(payload)
-        self.conn.sendall(len(data).to_bytes(4, 'big') + data)
+        NetworkManager.send_frame(self.conn, data)
         print(f"Sent {path}")
 
 class GUI:
@@ -129,11 +129,11 @@ class GUI:
                     # Simple save, real app should probably ask user or save to downloads
                     with open("recv_" + fname, "wb") as f:
                          f.write(dec[6:].split(b"::", 1)[1])
-                    self._log(f"Received file: recv_{fname}")
+                    self.root.after(0, self._log, f"Received file: recv_{fname}")
                 else:
-                    self._log(f"Peer: {dec.decode()}")
+                    self.root.after(0, self._log, f"Peer: {dec.decode()}")
             except: break
-        self._log("Disconnected.")
+        self.root.after(0, self._log, "Disconnected.")
 
     def start(self):
         import threading
