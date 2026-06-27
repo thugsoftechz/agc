@@ -34,7 +34,7 @@ class VoiceCall:
                 while self.running:
                     data = stream.read(CHUNK, exception_on_overflow=False)
                     encrypted = self.sec.encrypt(data)
-                    conn.sendall(len(encrypted).to_bytes(4, 'big') + encrypted)
+                    NetworkManager.send_frame(conn, encrypted)
             except: pass
             finally: stream.close()
 
@@ -42,10 +42,7 @@ class VoiceCall:
             stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
             try:
                 while self.running:
-                    header = NetworkManager.recvall(conn, 4)
-                    if not header: break
-                    length = int.from_bytes(header, 'big')
-                    data = NetworkManager.recvall(conn, length)
+                    data = NetworkManager.recv_frame(conn)
                     if not data: break
                     stream.write(self.sec.decrypt(data))
             except: pass
@@ -79,7 +76,7 @@ class VideoCall:
                     frame = imutils.resize(frame, width=320)
                     _, buffer = cv2.imencode('.jpg', frame)
                     encrypted = self.sec.encrypt(buffer.tobytes())
-                    conn.sendall(struct.pack("Q", len(encrypted)) + encrypted)
+                    NetworkManager.send_frame(conn, encrypted)
                     cv2.imshow('My Video', frame)
                     if cv2.waitKey(1) == 13: break
                 except: break
@@ -87,34 +84,11 @@ class VideoCall:
             conn.close()
 
         def recv():
-            payload_size = struct.calcsize("Q")
-            data = b""
             while self.running:
                 try:
-                    if len(data) < payload_size:
-                        chunks = [data]
-                        current_len = len(data)
-                        while current_len < payload_size:
-                            packet = conn.recv(4096)
-                            if not packet: return
-                            chunks.append(packet)
-                            current_len += len(packet)
-                        data = b"".join(chunks)
-                    packed_msg_size = data[:payload_size]
-                    data = data[payload_size:]
-                    msg_size = struct.unpack("Q", packed_msg_size)[0]
-                    if len(data) < msg_size:
-                        chunks = [data]
-                        current_len = len(data)
-                        while current_len < msg_size:
-                            packet = conn.recv(4096)
-                            if not packet: return
-                            chunks.append(packet)
-                            current_len += len(packet)
-                        data = b"".join(chunks)
-                    encrypted = data[:msg_size]
-                    data = data[msg_size:]
-                    frame_bytes = self.sec.decrypt(encrypted)
+                    data = NetworkManager.recv_frame(conn)
+                    if not data: break
+                    frame_bytes = self.sec.decrypt(data)
                     frame = cv2.imdecode(np.frombuffer(frame_bytes, np.uint8), cv2.IMREAD_COLOR)
                     if frame is not None: cv2.imshow('Peer Video', frame)
                     if cv2.waitKey(1) == 13: break
