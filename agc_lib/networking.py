@@ -58,8 +58,7 @@ class NetworkManager:
 
     @staticmethod
     def send_frame(conn, data):
-        conn.sendall(len(data).to_bytes(4, 'big'))
-        conn.sendall(data)
+        conn.sendall(len(data).to_bytes(4, 'big') + data)
 
     @staticmethod
     def recv_frame(conn):
