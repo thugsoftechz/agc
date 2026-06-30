@@ -38,12 +38,13 @@ def run_host(args):
         settings["password"] = pw
         save_settings(settings)
 
-    conn.sendall(b"[AUTH]")
-    if conn.recv(1024).decode().strip() != pw:
-        conn.sendall(b"[FAIL]")
+    NetworkManager.send_frame(conn, b"[AUTH]")
+    recv_auth = NetworkManager.recv_frame(conn)
+    if not recv_auth or recv_auth.decode().strip() != pw:
+        NetworkManager.send_frame(conn, b"[FAIL]")
         conn.close()
         return
-    conn.sendall(b"[OK]")
+    NetworkManager.send_frame(conn, b"[OK]")
 
     # Handshake
     pub_pem = sec.generate_rsa_keys()
@@ -75,9 +76,9 @@ def run_client(args):
     try: s.connect((ip, port))
     except Exception as e: print(f"Connection failed: {e}"); return
 
-    if s.recv(1024) == b"[AUTH]":
-        s.sendall(getpass.getpass("Password: ").encode())
-        if s.recv(1024) != b"[OK]": print("Auth Failed"); return
+    if NetworkManager.recv_frame(s) == b"[AUTH]":
+        NetworkManager.send_frame(s, getpass.getpass("Password: ").encode())
+        if NetworkManager.recv_frame(s) != b"[OK]": print("Auth Failed"); return
 
     # Handshake
     pem = NetworkManager.recv_frame(s)
